@@ -341,7 +341,8 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
     inner class Glide {
         val enabled = boolean(
             key = "glide__enabled",
-            default = false,
+            // Tiune fork: on by default — the host asked for swipe typing out of the box.
+            default = true,
         )
         val showTrail = boolean(
             key = "glide__show_trail",

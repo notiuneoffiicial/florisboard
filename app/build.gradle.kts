@@ -165,7 +165,8 @@ dependencies {
     implementation(libs.mikepenz.aboutlibraries.core)
     implementation(libs.mikepenz.aboutlibraries.compose)
     implementation(libs.patrickgold.compose.tooltip)
-    implementation(libs.patrickgold.jetpref.datastore.model)
+    // `api`: the embedding app reads the keyboard's preferences (KeyboardPrefs.kt).
+    api(libs.patrickgold.jetpref.datastore.model)
     ksp(libs.patrickgold.jetpref.datastore.model.processor)
     implementation(libs.patrickgold.jetpref.datastore.ui)
     implementation(libs.patrickgold.jetpref.material.ui)

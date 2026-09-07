@@ -55,19 +55,7 @@
             android:roundIcon="@mipmap/floris_app_icon_round"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/FlorisAppTheme.Splash"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="ui" android:host="florisboard" android:pathPrefix="/" />
-            </intent-filter>
-            <intent-filter android:label="Import Extension">
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <data android:scheme="content"/>
-                <data android:mimeType="application/vnd.florisboard.extension+zip"/>
-            </intent-filter>
+            android:exported="false">
         </activity>
 
         <!-- Crash Dialog Activity -->

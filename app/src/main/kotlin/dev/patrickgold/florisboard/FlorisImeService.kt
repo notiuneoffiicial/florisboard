@@ -101,11 +101,13 @@ open class FlorisImeService : LifecycleInputMethodService() {
         }
 
         /**
-         * Hides the IME and launches [FlorisAppActivity].
+         * Hides the IME and opens the keyboard's settings — the embedding app's
+         * (Tiune fork: `onSettingsRequested`), or [FlorisAppActivity] by default.
          */
         fun launchSettings() {
             val ims = FlorisImeServiceReference.get() ?: return
             ims.requestHideSelf(0)
+            if (ims.onSettingsRequested()) return
             ims.launchActivity(FlorisAppActivity::class) {
                 it.flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED or
@@ -188,6 +190,11 @@ open class FlorisImeService : LifecycleInputMethodService() {
      *  whichever voice IME the system has; an embedding app overrides this to
      *  show its own panel (set `activeState.imeUiMode = VOICE`). */
     open fun onVoiceInputRequested(): Boolean = switchToVoiceInputMethod()
+
+    /** Tiune fork. The settings key was pressed (or the bar's customise
+     *  action asked for settings). Return true to have handled it; false
+     *  opens the keyboard's own settings activity. */
+    open fun onSettingsRequested(): Boolean = false
 
     /** Tiune fork. A vector drawable for the mic key; 0 means the stock microphone. */
     @DrawableRes

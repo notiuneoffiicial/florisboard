@@ -62,7 +62,9 @@ sealed class ImeWindowConstraints(rootInsets: ImeInsets.Root) {
 
     open val baselineRowCount: Float = 4f
     open val smartbarDynamicScalingFactor = 0.20f
-    open val smartbarStaticScalingFactor by calculation { 0.753f - smartbarDynamicScalingFactor }
+    // Tiune fork: a taller action bar (was 0.753), so its icons can be drawn
+    // at a size a thumb can aim for.
+    open val smartbarStaticScalingFactor by calculation { 0.9f - smartbarDynamicScalingFactor }
 
     open val resizeHandleTouchSize: Dp = 48.dp
     open val resizeHandleTouchOffsetFloating: Dp by calculation { resizeHandleTouchSize / 2 }

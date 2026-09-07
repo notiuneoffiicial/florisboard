@@ -70,13 +70,11 @@ data class QuickActionArrangement(
             dynamicActions = listOf(
                 QuickAction.InsertKey(TextKeyData.UNDO),
                 QuickAction.InsertKey(TextKeyData.REDO),
-                QuickAction.InsertKey(TextKeyData.SETTINGS),
-                QuickAction.InsertKey(TextKeyData.TOGGLE_FLOATING_WINDOW),
-                QuickAction.InsertKey(TextKeyData.TOGGLE_RESIZE_MODE),
+                // Tiune fork: no settings, window-mode or autocorrect toggles on the
+                // bar. The keyboard is configured from the host app's Settings,
+                // and the bar holds only what someone does while typing.
                 QuickAction.InsertKey(TextKeyData.IME_UI_MODE_CLIPBOARD),
                 QuickAction.InsertKey(TextKeyData.IME_UI_MODE_MEDIA),
-                QuickAction.InsertKey(TextKeyData.TOGGLE_COMPACT_LAYOUT),
-                QuickAction.InsertKey(TextKeyData.TOGGLE_AUTOCORRECT),
                 QuickAction.InsertKey(TextKeyData.TOGGLE_INCOGNITO_MODE),
                 QuickAction.InsertKey(TextKeyData.ARROW_UP),
                 QuickAction.InsertKey(TextKeyData.ARROW_DOWN),

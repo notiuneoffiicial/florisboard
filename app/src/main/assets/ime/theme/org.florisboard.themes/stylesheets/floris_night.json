@@ -144,6 +144,7 @@
     "shape": "circle()"
   },
   "smartbar-action-key": {
+    "font-size": "26sp",
     "background": "transparent",
     "foreground": "var(--on-background)",
     "shape": "var(--shape)"
