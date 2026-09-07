@@ -19,8 +19,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.kotlinx.kover)
-    alias(libs.plugins.kotest)
 }
 
 val projectGroupId: String by project
@@ -52,16 +50,8 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
-kover {
-    useJacoco()
-}
-
 dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines)
-
-    testImplementation(libs.kotest.assertions.core)
-    testImplementation(libs.kotest.property)
-    testImplementation(libs.kotest.runner.junit5)
 }
 

@@ -19,7 +19,11 @@ package dev.patrickgold.florisboard.ime
 enum class ImeUiMode(val value: Int) {
     TEXT(0),
     MEDIA(1),
-    CLIPBOARD(2);
+    CLIPBOARD(2),
+
+    /** A voice-input panel supplied by the embedding app (Tiune) in place of
+     *  the keyboard rows. See [dev.patrickgold.florisboard.FlorisImeService.createVoiceInputView]. */
+    VOICE(3);
 
     companion object {
         fun fromInt(int: Int) = entries.firstOrNull { it.value == int } ?: TEXT

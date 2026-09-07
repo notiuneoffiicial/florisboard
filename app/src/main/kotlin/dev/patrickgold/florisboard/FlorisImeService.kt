@@ -39,6 +39,7 @@ import androidx.annotation.RequiresApi
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.annotation.DrawableRes
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import dev.patrickgold.florisboard.app.FlorisAppActivity
@@ -86,7 +87,7 @@ private var FlorisImeServiceReference = WeakReference<FlorisImeService?>(null)
  * Core class responsible for linking together all managers and UI composables to provide an IME service. Sets
  * up the window and context to be lifecycle-aware, so LiveData and Jetpack Compose can be used without issues.
  */
-class FlorisImeService : LifecycleInputMethodService() {
+open class FlorisImeService : LifecycleInputMethodService() {
     companion object {
         private val InlineSuggestionUiSmallestSize = Size(0, 0)
         private val InlineSuggestionUiBiggestSize = Size(Int.MAX_VALUE, Int.MAX_VALUE)
@@ -146,11 +147,56 @@ class FlorisImeService : LifecycleInputMethodService() {
             val ims = FlorisImeServiceReference.get() ?: return null
             return ims.windowController
         }
+
+        // ---- Tiune fork: the embedding-app seam ---------------------------
+        //
+        // Tiune registers a subclass of this service in its manifest and puts
+        // its own dictation panel behind the keyboard's mic key. These are
+        // the three places the keyboard asks the subclass what to do; each has
+        // upstream's behaviour as its default, so a plain FlorisImeService is
+        // unchanged.
+
+        /** The fully-qualified class name the manifest registers as the IME.
+         *  `InputMethodUtils` compares against it on Android < 14 to answer
+         *  "is this keyboard enabled / selected". A subclass sets it once,
+         *  from its Application. */
+        @JvmStatic
+        var imeServiceClassName: String = FlorisImeService::class.java.name
+
+        /** The mic key was pressed. */
+        fun requestVoiceInput(): Boolean {
+            val ims = FlorisImeServiceReference.get() ?: return false
+            return ims.onVoiceInputRequested()
+        }
+
+        /** A drawable resource for the mic key, or null for the stock icon. */
+        fun voiceInputIconResOrNull(): Int? {
+            return FlorisImeServiceReference.get()?.voiceInputIconRes()?.takeIf { it != 0 }
+        }
+
+        /** A fresh panel View for [dev.patrickgold.florisboard.ime.ImeUiMode.VOICE], or null. */
+        fun voiceInputViewOrNull(context: Context): View? {
+            return FlorisImeServiceReference.get()?.createVoiceInputView(context)
+        }
     }
 
     fun hideUi() {
         requestHideSelf(0)
     }
+
+    /** Tiune fork. Called when the mic key is pressed. Upstream switches to
+     *  whichever voice IME the system has; an embedding app overrides this to
+     *  show its own panel (set `activeState.imeUiMode = VOICE`). */
+    open fun onVoiceInputRequested(): Boolean = switchToVoiceInputMethod()
+
+    /** Tiune fork. A vector drawable for the mic key; 0 means the stock microphone. */
+    @DrawableRes
+    open fun voiceInputIconRes(): Int = 0
+
+    /** Tiune fork. Build the panel shown for [ImeUiMode.VOICE]. Called each
+     *  time the mode is entered; return a NEW view every time (the previous
+     *  one may still be attached). Null means the mode is unavailable. */
+    open fun createVoiceInputView(context: Context): View? = null
 
     /**
      * Show the Ime UI
@@ -371,7 +417,10 @@ class FlorisImeService : LifecycleInputMethodService() {
         if (info == null) return
         val editorInfo = FlorisEditorInfo.wrap(info)
         activeState.batchEdit {
-            if (activeState.imeUiMode != ImeUiMode.CLIPBOARD || prefs.clipboard.historyHideOnNextTextField.get()) {
+            // Tiune fork: a restart of the same field (apps do this on every
+            // commit) must not throw the user out of a dictation in progress.
+            val keepVoice = activeState.imeUiMode == ImeUiMode.VOICE && restarting
+            if (!keepVoice && (activeState.imeUiMode != ImeUiMode.CLIPBOARD || prefs.clipboard.historyHideOnNextTextField.get())) {
                 activeState.imeUiMode = ImeUiMode.TEXT
             }
             activeState.isSelectionMode = editorInfo.initialSelection.isSelectionMode

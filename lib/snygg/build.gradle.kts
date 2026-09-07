@@ -20,10 +20,10 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
  */
 
 plugins {
-    alias(libs.plugins.agp.library)
+    id("com.android.library")
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.plugin.compose)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.kotlinx.kover)
 }
 
 val projectMinSdk: String by project
@@ -59,14 +59,7 @@ configure<LibraryExtension> {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-        }
-        create("beta") {
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
-    }
+        }    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -78,10 +71,6 @@ tasks.withType<Test> {
         events = setOf(TestLogEvent.FAILED, TestLogEvent.PASSED, TestLogEvent.SKIPPED)
     }
     useJUnitPlatform()
-}
-
-kover {
-    useJacoco()
 }
 
 dependencies {
@@ -103,28 +92,5 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
     implementation(libs.kotlinx.serialization.json)
-
-    testImplementation(libs.kotlin.test.junit5)
 }
 
-tasks.register<JavaExec>("generateJsonSchema") {
-    description = "Generate the JSON schema for Snygg themes"
-    dependsOn("compileDebugKotlin")
-    mainClass.set("org.florisboard.lib.snygg.SnyggJsonSchemaGenerator")
-    val debugRuntime = configurations.named("debugRuntimeClasspath")
-    val compileTask = tasks.named<KotlinCompile>("compileDebugKotlin")
-    val debugRuntimeArtifactView = debugRuntime.get().incoming.artifactView {
-        attributes { attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "android-classes") }
-    }
-    classpath = files(
-        compileTask.map { it.destinationDirectory },
-        debugRuntimeArtifactView.files
-    )
-    args = listOf("schemas/stylesheet.schema.json")
-    workingDir = projectDir
-    standardOutput = System.out
-}
-
-tasks.matching { it.name == "compileDebugKotlin" }.configureEach {
-    finalizedBy("generateJsonSchema")
-}

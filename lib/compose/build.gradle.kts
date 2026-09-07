@@ -18,7 +18,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
  */
 
 plugins {
-    alias(libs.plugins.agp.library)
+    id("com.android.library")
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.plugin.compose)
 }
 
@@ -56,14 +57,7 @@ configure<LibraryExtension> {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-        }
-        create("beta") {
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
-    }
+        }    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -88,7 +82,5 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.patrickgold.jetpref.material.ui)
-
-    testImplementation(libs.kotlin.test.junit5)
 }
 

@@ -14,18 +14,31 @@
  * limitations under the License.
  */
 
-import com.android.build.api.dsl.ApplicationExtension
-import org.gradle.api.tasks.testing.logging.TestLogEvent
+/*
+ * Tiune fork: this module is built as an Android LIBRARY, not an app.
+ *
+ * Upstream FlorisBoard is a standalone keyboard app. Tiune embeds the whole
+ * keyboard — layouts, themes, suggestions, the settings screens — inside its
+ * own app, and puts its dictation panel behind the keyboard's mic key. So the
+ * things an app module owns (applicationId, version, signing, the launcher
+ * icon, product flavours) are owned by Tiune's app module instead, and this
+ * file declares a library whose manifest and resources merge into it.
+ *
+ * The Android Gradle plugin is requested WITHOUT a version on purpose: the
+ * embedding build already has it on the classpath (Tauri's buildSrc), and a
+ * versioned request for a plugin that is already loaded is a Gradle error.
+ */
+
+import com.android.build.api.dsl.LibraryExtension
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    alias(libs.plugins.agp.application)
+    id("com.android.library")
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.plugin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.mikepenz.aboutlibraries)
-    alias(libs.plugins.kotest)
-    alias(libs.plugins.kotlinx.kover)
 }
 
 val projectMinSdk: String by project
@@ -33,13 +46,14 @@ val projectTargetSdk: String by project
 val projectCompileSdk: String by project
 val projectVersionCode: String by project
 val projectVersionName: String by project
-val projectVersionNameSuffix = projectVersionName.substringAfter("-", "").let { suffix ->
-    if (suffix.isNotEmpty()) {
-        "-$suffix"
-    } else {
-        suffix
-    }
-}
+
+// The embedding app's identity, so the code paths that used to read them from
+// an application BuildConfig (FileProvider authorities, "is this keyboard
+// enabled" checks, the backup format's version stamp) keep working. Set by the
+// embedding build through Gradle properties; the defaults are upstream's.
+val hostApplicationId: String = (findProperty("florisHostApplicationId") as? String) ?: "dev.patrickgold.florisboard"
+val hostVersionCode: String = (findProperty("florisHostVersionCode") as? String) ?: projectVersionCode
+val hostVersionName: String = (findProperty("florisHostVersionName") as? String) ?: projectVersionName.substringBefore("-")
 
 kotlin {
     compilerOptions {
@@ -55,11 +69,9 @@ kotlin {
     }
 }
 
-configure<ApplicationExtension> {
+configure<LibraryExtension> {
     namespace = "dev.patrickgold.florisboard"
     compileSdk = projectCompileSdk.toInt()
-    buildToolsVersion = tools.versions.buildTools.get()
-    ndkVersion = tools.versions.ndk.get()
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -67,14 +79,14 @@ configure<ApplicationExtension> {
     }
 
     defaultConfig {
-        applicationId = "dev.patrickgold.florisboard"
         minSdk = projectMinSdk.toInt()
-        targetSdk = projectTargetSdk.toInt()
-        versionCode = projectVersionCode.toInt()
-        versionName = projectVersionName.substringBefore("-")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles("proguard-rules.pro")
 
+        buildConfigField("String", "APPLICATION_ID", "\"$hostApplicationId\"")
+        buildConfigField("int", "VERSION_CODE", hostVersionCode)
+        buildConfigField("String", "VERSION_NAME", "\"$hostVersionName\"")
         buildConfigField("String", "BUILD_COMMIT_HASH", "\"${getGitCommitHash().get()}\"")
         buildConfigField("String", "FLADDONS_API_VERSION", "\"v~draft2\"")
         buildConfigField("String", "FLADDONS_STORE_URL", "\"beta.addons.florisboard.org\"")
@@ -86,15 +98,6 @@ configure<ApplicationExtension> {
         }
     }
 
-    bundle {
-        language {
-            // We disable language split because FlorisBoard does not use
-            // runtime Google Play Service APIs and thus cannot dynamically
-            // request to download the language resources for a specific locale.
-            enableSplit = false
-        }
-    }
-
     buildFeatures {
         buildConfig = true
         compose = true
@@ -102,38 +105,10 @@ configure<ApplicationExtension> {
 
     buildTypes {
         named("debug") {
-            applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug+${getGitCommitHash(short = true).get()}"
-
-            isDebuggable = true
             isJniDebuggable = false
         }
-
-        create("beta") {
-            applicationIdSuffix = ".beta"
-            versionNameSuffix = projectVersionNameSuffix
-
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            isMinifyEnabled = true
-            isShrinkResources = true
-        }
-
         named("release") {
-            versionNameSuffix = projectVersionNameSuffix
-
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            isMinifyEnabled = true
-            isShrinkResources = true
-        }
-
-        create("benchmark") {
-            initWith(getByName("release"))
-
-            applicationIdSuffix = ".bench"
-            versionNameSuffix = "-bench+${getGitCommitHash(short = true).get()}"
-
-            signingConfig = signingConfigs.getByName("debug")
-            matchingFallbacks += listOf("release")
+            isMinifyEnabled = false
         }
     }
 
@@ -144,9 +119,6 @@ configure<ApplicationExtension> {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
-        }
-        unitTests.all {
-            it.useJUnitPlatform()
         }
     }
 }
@@ -163,22 +135,9 @@ ksp {
     arg("room.expandProjection", "true")
 }
 
-tasks.withType<Test> {
-    testLogging {
-        events = setOf(TestLogEvent.FAILED, TestLogEvent.PASSED, TestLogEvent.SKIPPED)
-    }
-    useJUnitPlatform()
-}
-
-kover {
-    useJacoco()
-}
-
 dependencies {
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
-    // testImplementation(composeBom)
-    // androidTestImplementation(composeBom)
 
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.activity.ktx)
@@ -211,29 +170,22 @@ dependencies {
     implementation(libs.patrickgold.jetpref.datastore.ui)
     implementation(libs.patrickgold.jetpref.material.ui)
 
-    implementation(projects.lib.android)
-    implementation(projects.lib.color)
-    implementation(projects.lib.compose)
-    implementation(projects.lib.kotlin)
-    implementation(projects.lib.native)
-    implementation(projects.lib.snygg)
-
-    testImplementation(libs.kotest.assertions.core)
-    testImplementation(libs.kotest.property)
-    testImplementation(libs.kotest.runner.junit5)
-    testImplementation(libs.kotlin.test.junit5)
-    testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.turbine)
-    androidTestImplementation(libs.androidx.test.ext)
-    androidTestImplementation(libs.androidx.test.espresso.core)
+    // `api`, not `implementation`: the embedding app subclasses
+    // FlorisImeService and reaches the same Compose/lib types it does.
+    api(projects.lib.android)
+    api(projects.lib.color)
+    api(projects.lib.compose)
+    api(projects.lib.kotlin)
+    api(projects.lib.snygg)
 }
 
 fun getGitCommitHash(short: Boolean = false): Provider<String> {
-    if (!File(".git").exists()) {
+    if (!File(projectDir, "../.git").exists()) {
         return providers.provider { "null" }
     }
 
     val execProvider = providers.exec {
+        workingDir = projectDir
         if (short) {
             commandLine("git", "rev-parse", "--short", "HEAD")
         } else {

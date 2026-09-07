@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import dev.patrickgold.florisboard.BuildConfig
+import dev.patrickgold.florisboard.FlorisImeService
 import dev.patrickgold.florisboard.lib.devtools.flogDebug
 import kotlinx.coroutines.delay
 import org.florisboard.lib.android.AndroidSettings
@@ -37,7 +38,8 @@ import org.florisboard.lib.android.systemServiceOrNull
 import org.florisboard.lib.compose.observeAsState
 
 private const val DELIMITER = ':'
-private const val IME_SERVICE_CLASS_NAME = "dev.patrickgold.florisboard.FlorisImeService"
+// Tiune fork: the registered IME service may be a subclass in the embedding app.
+private val IME_SERVICE_CLASS_NAME get() = FlorisImeService.imeServiceClassName
 private const val TIMED_QUERY_DELAY = 500L
 
 object InputMethodUtils {

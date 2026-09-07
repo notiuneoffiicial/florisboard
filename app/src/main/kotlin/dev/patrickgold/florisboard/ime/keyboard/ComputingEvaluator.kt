@@ -227,7 +227,8 @@ fun ComputingEvaluator.computeImageVector(data: KeyData): ImageVector? {
             context()?.vectorResource(id = R.drawable.ic_resize)
         }
         KeyCode.VOICE_INPUT -> {
-            Icons.Default.KeyboardVoice
+            FlorisImeService.voiceInputIconResOrNull()?.let { context()?.vectorResource(id = it) }
+                ?: Icons.Default.KeyboardVoice
         }
         KeyCode.IME_HIDE_UI -> {
             Icons.Default.KeyboardHide

@@ -18,7 +18,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
  */
 
 plugins {
-    alias(libs.plugins.agp.library)
+    id("com.android.library")
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
 }
 
@@ -53,15 +54,7 @@ configure<LibraryExtension> {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-        }
-        create("beta") {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-        }
-    }
+        }    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
