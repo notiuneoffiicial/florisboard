@@ -159,12 +159,14 @@ class TextKey(override val data: AbstractKeyData) : Key(data) {
                     else -> 1.56f
                 }
                 else -> when (computed.code) {
+                    // Tiune fork: 1.5, as Gboard's shift, backspace, ?123 and
+                    // enter are; 1.56 pushed z–m 2.5dp to the right of Gboard's.
                     KeyCode.SHIFT,
-                    KeyCode.DELETE -> 1.56f
+                    KeyCode.DELETE -> 1.5f
                     KeyCode.VIEW_CHARACTERS,
                     KeyCode.VIEW_SYMBOLS,
                     KeyCode.VIEW_SYMBOLS2,
-                    KeyCode.ENTER -> 1.56f
+                    KeyCode.ENTER -> 1.5f
                     else -> 1.00f
                 }
             }

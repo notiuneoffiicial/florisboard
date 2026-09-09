@@ -409,17 +409,25 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
             key = "input_feedback__haptic_activation_mode",
             default = InputFeedbackActivationMode.RESPECT_SYSTEM_SETTINGS,
         )
+        // Tiune fork: the platform's own haptic, not a raw buzz. Every phone
+        // ships a keyboard-tap effect tuned to its motor — that short, dry
+        // click every stock keyboard uses — and asking for it by name is the
+        // only way to get it. Driving the vibrator directly for 50ms at half
+        // amplitude is a different sensation entirely: long enough to read as
+        // a rumble rather than a click, which is what "too vibrate-y" is.
         val hapticVibrationMode = enum(
             key = "input_feedback__haptic_vibration_mode",
-            default = HapticVibrationMode.USE_VIBRATOR_DIRECTLY,
+            default = HapticVibrationMode.USE_HAPTIC_FEEDBACK_INTERFACE,
         )
+        // Only reached on a phone whose view refuses the effect above. Kept
+        // short and light so the fallback is still a click.
         val hapticVibrationDuration = int(
             key = "input_feedback__haptic_vibration_duration",
-            default = 50,
+            default = 18,
         )
         val hapticVibrationStrength = int(
             key = "input_feedback__haptic_vibration_strength",
-            default = 50,
+            default = 35,
         )
         val hapticFeatKeyPress = boolean(
             key = "input_feedback__haptic_feat_key_press",
@@ -437,9 +445,14 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
             key = "input_feedback__haptic_feat_gesture_swipe",
             default = false,
         )
+        // Tiune fork: off. This fires on every pointer move of a glide —
+        // dozens a second — and once the effects above are real haptics
+        // rather than a 2.5ms nudge, a swiped word buzzes for its whole
+        // length. No stock keyboard does this; the gesture gets one tick at
+        // its start (hapticFeatGestureSwipe) and silence after.
         val hapticFeatGestureMovingSwipe = boolean(
             key = "input_feedback__haptic_feat_gesture_moving_swipe",
-            default = true,
+            default = false,
         )
     }
 

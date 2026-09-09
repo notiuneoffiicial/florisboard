@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -58,13 +59,17 @@ fun SnyggIcon(
     modifier: Modifier = Modifier,
     imageVector: ImageVector,
     contentDescription: String? = null,
+    // Tiune fork: an override for the one icon that is not the keyboard's —
+    // the embedding app's mic key, which carries that app's colour. Null
+    // keeps the stylesheet's foreground, which is every other icon.
+    tint: Color? = null,
 ) {
     ProvideSnyggStyle(elementName, attributes, selector) { style ->
         Icon(
             modifier = modifier.snyggIconSize(style),
             imageVector = imageVector,
             contentDescription = contentDescription,
-            tint = style.foreground(),
+            tint = tint ?: style.foreground(),
         )
     }
 }

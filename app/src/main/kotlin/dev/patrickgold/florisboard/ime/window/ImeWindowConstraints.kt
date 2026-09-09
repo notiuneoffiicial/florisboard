@@ -62,9 +62,11 @@ sealed class ImeWindowConstraints(rootInsets: ImeInsets.Root) {
 
     open val baselineRowCount: Float = 4f
     open val smartbarDynamicScalingFactor = 0.20f
-    // Tiune fork: a taller action bar (was 0.753), so its icons can be drawn
-    // at a size a thumb can aim for.
-    open val smartbarStaticScalingFactor by calculation { 0.9f - smartbarDynamicScalingFactor }
+    // Tiune fork: the action bar is the height of Gboard's toolbar (was
+    // 0.753 upstream). Measured on a Pixel 7 Pro running Gboard 18, the bar
+    // is 44dp over 48dp rows — 0.917 of a row; matching it puts every letter
+    // row exactly where Gboard's is, which is what a typist's thumbs learned.
+    open val smartbarStaticScalingFactor by calculation { 0.917f - smartbarDynamicScalingFactor }
 
     open val resizeHandleTouchSize: Dp = 48.dp
     open val resizeHandleTouchOffsetFloating: Dp by calculation { resizeHandleTouchSize / 2 }
@@ -138,7 +140,11 @@ sealed class ImeWindowConstraints(rootInsets: ImeInsets.Root) {
                 ImeFormFactor.Type.TABLET_LANDSCAPE -> 0.35f
                 ImeFormFactor.Type.TABLET_PORTRAIT -> 0.22f
                 ImeFormFactor.Type.PHONE_LANDSCAPE -> 0.47f
-                ImeFormFactor.Type.PHONE_PORTRAIT -> 0.26f
+                // Tiune fork: Gboard 18 on a Pixel 7 Pro (411x891dp) draws
+                // 48dp rows — 36dp keys, 12dp apart — for 192dp of keys, which
+                // is 0.2192 of the 876dp this baseline measures there. Upstream's
+                // 0.26 gave 57dp rows and put the top row 30dp above Gboard's.
+                ImeFormFactor.Type.PHONE_PORTRAIT -> 0.2192f
             }
             (baselineScreen.height * factor).coerceIn(minKeyboardHeight, maxKeyboardHeight)
         }
@@ -150,7 +156,8 @@ sealed class ImeWindowConstraints(rootInsets: ImeInsets.Root) {
                 ImeFormFactor.Type.TABLET_LANDSCAPE -> 2.dp
                 ImeFormFactor.Type.TABLET_PORTRAIT -> 5.dp
                 ImeFormFactor.Type.PHONE_LANDSCAPE -> 2.dp
-                ImeFormFactor.Type.PHONE_PORTRAIT -> 2.dp
+                // Tiune fork: Gboard's keys are 9.4dp apart; 2dp here read as 8.6.
+                ImeFormFactor.Type.PHONE_PORTRAIT -> 2.2.dp
             }
         }
         override val defKeyMarginV by calculation {
@@ -160,7 +167,10 @@ sealed class ImeWindowConstraints(rootInsets: ImeInsets.Root) {
                 ImeFormFactor.Type.TABLET_LANDSCAPE -> 5.dp
                 ImeFormFactor.Type.TABLET_PORTRAIT -> 5.dp
                 ImeFormFactor.Type.PHONE_LANDSCAPE -> 5.dp
-                ImeFormFactor.Type.PHONE_PORTRAIT -> 5.dp
+                // Tiune fork: Gboard's keys stand 12dp apart vertically (6 each
+                // side), against 10dp here. Same key height, same row pitch,
+                // same gap: the rows line up with Gboard's.
+                ImeFormFactor.Type.PHONE_PORTRAIT -> 6.dp
             }
         }
 
@@ -178,12 +188,27 @@ sealed class ImeWindowConstraints(rootInsets: ImeInsets.Root) {
         abstract override val defaultProps: ImeWindowProps.Fixed
 
         class Normal(rootInsets: ImeInsets.Root) : Fixed(rootInsets) {
+            // Tiune fork: Gboard 18's keys span 17.4→393.7dp of a 411dp phone,
+            // a 38.6dp pitch. 10.7dp of window padding a side puts them there
+            // (the row's own edge margin makes up the rest), measured on the
+            // Pixel 7 Pro itself.
+            override val desiredDefPaddingHorizontal by calculation {
+                when (formFactor.typeGuess) {
+                    ImeFormFactor.Type.PHONE_PORTRAIT -> 21.4.dp
+                    else -> 0.dp
+                }
+            }
             override val defaultProps by calculation {
                 ImeWindowProps.Fixed(
                     keyboardHeight = defKeyboardHeight,
-                    paddingLeft = 0.dp,
-                    paddingRight = 0.dp,
-                    paddingBottom = 0.dp,
+                    paddingLeft = defPaddingHorizontal / 2,
+                    paddingRight = defPaddingHorizontal / 2,
+                    // Tiune fork: Gboard leaves 14dp under its bottom row on a
+                    // phone; without it every row here sat that much lower.
+                    paddingBottom = when (formFactor.typeGuess) {
+                        ImeFormFactor.Type.PHONE_PORTRAIT -> 15.dp
+                        else -> 0.dp
+                    },
                 )
             }
         }

@@ -176,6 +176,12 @@ open class FlorisImeService : LifecycleInputMethodService() {
             return FlorisImeServiceReference.get()?.voiceInputIconRes()?.takeIf { it != 0 }
         }
 
+        /** An ARGB colour for the mic key's icon, or null to let the theme
+         *  tint it like every other key. */
+        fun voiceInputIconTintOrNull(): Int? {
+            return FlorisImeServiceReference.get()?.voiceInputIconTint()?.takeIf { it != 0 }
+        }
+
         /** A fresh panel View for [dev.patrickgold.florisboard.ime.ImeUiMode.VOICE], or null. */
         fun voiceInputViewOrNull(context: Context): View? {
             return FlorisImeServiceReference.get()?.createVoiceInputView(context)
@@ -199,6 +205,12 @@ open class FlorisImeService : LifecycleInputMethodService() {
     /** Tiune fork. A vector drawable for the mic key; 0 means the stock microphone. */
     @DrawableRes
     open fun voiceInputIconRes(): Int = 0
+
+    /** Tiune fork. An ARGB colour for that icon; 0 means the theme's own key
+     *  tint. The mic is the one key on this keyboard that belongs to the
+     *  embedding app rather than to the keyboard, and a key that opens
+     *  something else should look like the thing it opens. */
+    open fun voiceInputIconTint(): Int = 0
 
     /** Tiune fork. Build the panel shown for [ImeUiMode.VOICE]. Called each
      *  time the mode is entered; return a NEW view every time (the previous
@@ -408,6 +420,22 @@ open class FlorisImeService : LifecycleInputMethodService() {
         super.onDestroy()
         unregisterReceiver(wallpaperChangeReceiver)
         FlorisImeServiceReference = WeakReference(null)
+    }
+
+    // Tiune fork: see InProcessInputConnection. One wrapper per connection,
+    // not one per call — this getter runs on every keystroke.
+    private var inProcessRaw: InputConnection? = null
+    private var inProcessWrapped: InputConnection? = null
+
+    override fun getCurrentInputConnection(): InputConnection? {
+        val ic = super.getCurrentInputConnection() ?: return null
+        val info = currentInputEditorInfo ?: return ic
+        if (info.packageName != packageName) return ic
+        if (inProcessRaw !== ic) {
+            inProcessRaw = ic
+            inProcessWrapped = InProcessInputConnection(ic)
+        }
+        return inProcessWrapped
     }
 
     override fun onStartInput(info: EditorInfo?, restarting: Boolean) {

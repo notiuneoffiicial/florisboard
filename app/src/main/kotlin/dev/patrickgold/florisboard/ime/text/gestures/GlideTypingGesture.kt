@@ -43,6 +43,27 @@ class GlideTypingGesture {
         companion object {
             private const val MAX_DETECT_TIME = 500
             private const val VELOCITY_THRESHOLD = 0.10 // dp per ms
+
+            /**
+             * Tiune fork: how far the finger has to travel, in key widths,
+             * before a press becomes a glide.
+             *
+             * Upstream is 1.0 — one key width. A fast typist's finger does
+             * not land and stop; it lands, presses, and slides off as the
+             * hand moves to the next letter, and a slide of one key width at
+             * 0.1dp/ms is trivially reached in normal typing. The result is a
+             * whole word swallowed and replaced by a guess, on a keypress
+             * nobody meant as a gesture — which is unrecoverable in a way a
+             * wrong letter is not.
+             *
+             * 1.75 is "past the neighbouring key", which no tap reaches and
+             * every deliberate glide passes in its first few samples. Raising
+             * the bar costs a real glide nothing: the points recorded before
+             * it is met are replayed to the classifier the moment it is (see
+             * `positions.take` below), so the word still starts at the letter
+             * the finger started on.
+             */
+            private const val GESTURE_KEY_WIDTHS = 1.75
             private val SWIPE_GESTURE_KEYS = arrayOf(KeyCode.DELETE, KeyCode.SHIFT, KeyCode.SPACE, KeyCode.CJK_SPACE)
         }
 
@@ -88,7 +109,7 @@ class GlideTypingGesture {
                             val dist = ViewUtils.px2dp(pointerData.positions[0].dist(pos))
                             val time = (System.currentTimeMillis() - pointerData.startTime) + 1
                             flogDebug { "Distance glided: $dist dp with velocity: ${dist / time} dp/ms" }
-                            if (dist > keySize && (dist / time) > VELOCITY_THRESHOLD && (initialKey?.computedData?.code !in SWIPE_GESTURE_KEYS)) {
+                            if (dist > keySize * GESTURE_KEY_WIDTHS && (dist / time) > VELOCITY_THRESHOLD && (initialKey?.computedData?.code !in SWIPE_GESTURE_KEYS)) {
                                 pointerData.isActuallyGesture = true
                                 // Let listener know all those points need to be added.
                                 pointerData.positions.take(pointerData.positions.size - 1).forEach { point ->

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#4CAF50</color><!-- Green 500 -->
-    <color name="colorPrimaryDark">#388E3C</color><!-- Green 700 -->
-    <color name="colorAccent">#FF9800</color><!-- Orange 500 -->
-    <color name="colorAccentDark">#F57C00</color><!-- Orange 700 -->
+    <color name="colorPrimary">#F5A623</color><!-- Tiune amber -->
+    <color name="colorPrimaryDark">#B98A34</color><!-- Tiune amber, deep -->
+    <color name="colorAccent">#F5A623</color><!-- Tiune amber -->
+    <color name="colorAccentDark">#B98A34</color><!-- Tiune amber, deep -->
 
     <color name="colorSuccess">@color/colorPrimary</color><!-- Green 500 -->
     <color name="textColorSuccess">#FFFFFF</color><!-- White -->

@@ -25,7 +25,6 @@ import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.ime.keyboard.KeyData
 import dev.patrickgold.florisboard.ime.text.key.KeyCode
 import dev.patrickgold.florisboard.ime.text.keyboard.TextKeyData
-import org.florisboard.lib.android.AndroidVersion
 import org.florisboard.lib.android.systemServiceOrNull
 import org.florisboard.lib.android.systemVibratorOrNull
 import org.florisboard.lib.android.vibrate
@@ -63,27 +62,66 @@ class InputFeedbackController private constructor(private val ims: InputMethodSe
 
     fun keyPress(data: KeyData = TextKeyData.UNSPECIFIED) {
         if (prefs.inputFeedback.audioFeatKeyPress.get()) performAudioFeedback(data, 1.0)
-        if (prefs.inputFeedback.hapticFeatKeyPress.get()) performHapticFeedback(data, 1.0)
+        if (prefs.inputFeedback.hapticFeatKeyPress.get()) performHapticFeedback(data, 1.0, Touch.TAP)
     }
 
     fun keyLongPress(data: KeyData = TextKeyData.UNSPECIFIED) {
         if (prefs.inputFeedback.audioFeatKeyLongPress.get()) performAudioFeedback(data, 0.7)
-        if (prefs.inputFeedback.hapticFeatKeyLongPress.get()) performHapticFeedback(data, 0.4)
+        if (prefs.inputFeedback.hapticFeatKeyLongPress.get()) performHapticFeedback(data, 0.4, Touch.LONG_PRESS)
     }
 
     fun keyRepeatedAction(data: KeyData = TextKeyData.UNSPECIFIED) {
         if (prefs.inputFeedback.audioFeatKeyRepeatedAction.get()) performAudioFeedback(data, 0.4)
-        if (prefs.inputFeedback.hapticFeatKeyRepeatedAction.get()) performHapticFeedback(data, 0.05)
+        if (prefs.inputFeedback.hapticFeatKeyRepeatedAction.get()) performHapticFeedback(data, 0.05, Touch.TICK)
     }
 
     fun gestureSwipe(data: KeyData = TextKeyData.UNSPECIFIED) {
         if (prefs.inputFeedback.audioFeatGestureSwipe.get()) performAudioFeedback(data, 0.7)
-        if (prefs.inputFeedback.hapticFeatGestureSwipe.get()) performHapticFeedback(data, 0.4)
+        if (prefs.inputFeedback.hapticFeatGestureSwipe.get()) performHapticFeedback(data, 0.4, Touch.TAP)
     }
 
     fun gestureMovingSwipe(data: KeyData = TextKeyData.UNSPECIFIED) {
         if (prefs.inputFeedback.audioFeatGestureMovingSwipe.get()) performAudioFeedback(data, 0.4)
-        if (prefs.inputFeedback.hapticFeatGestureMovingSwipe.get()) performHapticFeedback(data, 0.05)
+        if (prefs.inputFeedback.hapticFeatGestureMovingSwipe.get()) performHapticFeedback(data, 0.05, Touch.TICK)
+    }
+
+    /**
+     * Tiune fork: what kind of touch this was, so the right platform effect
+     * can be asked for by name.
+     *
+     * The amplitude factor used to carry this too — anything under 1.0 became
+     * the same faint tick — which made a long press and a key repeat
+     * indistinguishable, and neither of them like the phone's own keyboard.
+     * These three constants are the ones every stock keyboard uses, and the
+     * device's motor is tuned for them.
+     */
+    private enum class Touch(val constant: Int) {
+        TAP(HapticFeedbackConstants.KEYBOARD_TAP),
+        LONG_PRESS(HapticFeedbackConstants.LONG_PRESS),
+        TICK(HapticFeedbackConstants.CLOCK_TICK),
+    }
+
+    /**
+     * The platform haptic, on the view's thread. Falls back to the vibrator
+     * when the platform declines — a device with the effect unimplemented, or
+     * a window that went away in the moment between the two.
+     */
+    private fun performOnViewThread(view: android.view.View, touch: Touch) {
+        val didPerform = try {
+            view.performHapticFeedback(
+                touch.constant,
+                HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING or
+                    HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING,
+            )
+        } catch (e: Exception) {
+            flogDebug { "haptic feedback refused by the view: $e" }
+            false
+        }
+        if (didPerform) return
+        vibrator?.vibrate(
+            duration = prefs.inputFeedback.hapticVibrationDuration.get(),
+            strength = prefs.inputFeedback.hapticVibrationStrength.get(),
+        )
     }
 
     private fun systemPref(id: String): Boolean {
@@ -112,7 +150,7 @@ class InputFeedbackController private constructor(private val ims: InputMethodSe
         }
     }
 
-    private fun performHapticFeedback(data: KeyData, factor: Double) {
+    private fun performHapticFeedback(data: KeyData, factor: Double, touch: Touch) {
         if (vibrator == null) return
         if (!prefs.inputFeedback.hapticEnabled.get()) return
         if (prefs.inputFeedback.hapticActivationMode.get() ==
@@ -120,18 +158,25 @@ class InputFeedbackController private constructor(private val ims: InputMethodSe
 
         scope.launch {
             if (prefs.inputFeedback.hapticVibrationMode.get() == HapticVibrationMode.USE_HAPTIC_FEEDBACK_INTERFACE) {
-                val view = ims.window?.window?.decorView ?: return@launch
-                val hfc = if (factor < 1.0 && AndroidVersion.ATLEAST_API27_O_MR1) {
-                    HapticFeedbackConstants.TEXT_HANDLE_MOVE
-                } else {
-                    HapticFeedbackConstants.KEYBOARD_TAP
+                // Tiune fork: on the view's own thread, and never on this one.
+                //
+                // `performHapticFeedback` reaches through the view into its
+                // window session, which is only valid on the thread that owns
+                // the view — and this coroutine runs on Dispatchers.Default.
+                // A view whose window has gone away between the keypress and
+                // this line throws, on a background thread, with no handler
+                // above it: the process dies. That was survivable while the
+                // default was USE_VIBRATOR_DIRECTLY, which never touched a
+                // view; it is not now that this is the path every keypress
+                // takes.
+                //
+                // `post` returns false when the view has no handler to post
+                // to, which is the same "there is no window" case — so both
+                // ways of failing fall through to the vibrator below.
+                val view = ims.window?.window?.decorView
+                if (view != null && view.post { performOnViewThread(view, touch) }) {
+                    return@launch
                 }
-                val didPerform = view.performHapticFeedback(hfc,
-                    HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING or
-                        HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING
-                )
-                if (didPerform) return@launch
-                // If not performed fall back to using the vibrator directly
             }
 
             vibrator.vibrate(

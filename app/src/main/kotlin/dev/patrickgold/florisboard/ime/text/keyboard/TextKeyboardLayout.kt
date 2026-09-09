@@ -118,7 +118,7 @@ fun TextKeyboardLayout(
         evaluator.state.keyVariation != KeyVariation.PASSWORD
     val glideShowTrail by prefs.glide.showTrail.collectAsState()
     val glideTrailStyle = rememberSnyggThemeQuery(FlorisImeUi.GlideTrail.elementName)
-    val glideTrailColor = glideTrailStyle.foreground(default = Color.Green)
+    val glideTrailColor = glideTrailStyle.foreground(default = Color(0xFFF5A623))
 
     val controller = remember { TextKeyboardLayoutController(context) }.also {
         it.keyboard = keyboard

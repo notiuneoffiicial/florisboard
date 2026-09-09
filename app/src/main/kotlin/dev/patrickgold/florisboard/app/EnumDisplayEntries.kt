@@ -134,7 +134,7 @@ private val ENUM_DISPLAY_ENTRIES = mapOf<Pair<KClass<*>, String>, @Composable ()
             entry(
                 key = ColorRepresentation.HEX,
                 label = stringRes(R.string.enum__color_representation__hex),
-                description = stringRes(R.string.general__example_given).curlyFormat("example" to "#4caf50ff"),
+                description = stringRes(R.string.general__example_given).curlyFormat("example" to "#f5a623ff"),
                 showDescriptionOnlyIfSelected = true,
             )
             entry(

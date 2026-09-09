@@ -32,13 +32,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import dev.patrickgold.compose.tooltip.PlainTooltip
+import dev.patrickgold.florisboard.FlorisImeService
 import dev.patrickgold.florisboard.ime.input.LocalInputFeedbackController
 import dev.patrickgold.florisboard.ime.keyboard.ComputingEvaluator
 import dev.patrickgold.florisboard.ime.keyboard.computeImageVector
 import dev.patrickgold.florisboard.ime.keyboard.computeLabel
+import dev.patrickgold.florisboard.ime.text.key.KeyCode
 import dev.patrickgold.florisboard.ime.text.keyboard.TextKeyData
 import dev.patrickgold.florisboard.ime.theme.FlorisImeUi
 import org.florisboard.lib.snygg.SnyggSelector
@@ -125,13 +128,23 @@ fun QuickActionButton(
                         val (imageVector, label) = remember(action, evaluator) {
                             evaluator.computeImageVector(action.data) to evaluator.computeLabel(action.data)
                         }
+                        // Tiune fork: the mic key belongs to the embedding app,
+                        // and wears that app's colour rather than the
+                        // keyboard's key tint. Every other key is untouched.
+                        val tint = remember(action) {
+                            if (action.data.code == KeyCode.VOICE_INPUT) {
+                                FlorisImeService.voiceInputIconTintOrNull()?.let { Color(it) }
+                            } else {
+                                null
+                            }
+                        }
                         if (imageVector != null) {
                             SnyggBox(
                                 elementName = "$elementName-icon",
                                 attributes = attributes,
                                 selector = selector,
                             ) {
-                                SnyggIcon(imageVector = imageVector)
+                                SnyggIcon(imageVector = imageVector, tint = tint)
                             }
                         } else if (label != null) {
                             SnyggText(

@@ -1,10 +1,10 @@
 {
   "$schema": "https://schemas.florisboard.org/snygg/v2/stylesheet",
   "@defines": {
-    "--primary": "#4caf50",
-    "--primary-variant": "#388e3c",
-    "--secondary": "#ff9800",
-    "--secondary-variant": "#e65100",
+    "--primary": "#F5A623",
+    "--primary-variant": "#B98A34",
+    "--secondary": "#F5A623",
+    "--secondary-variant": "#B98A34",
     "--background": "#e0e0e0",
     "--background-variant": "#d0d0d0",
     "--surface": "#f0f0f0",
@@ -16,12 +16,12 @@
     "--drag-marker": "rgb(255,0,0)",
     "--spacer-color": "rgba(0 ,0, 0, 0.25)",
 
-    "--one-hand-background": "#e8f5e9",
+    "--one-hand-background": "#FBF1E0",
     "--one-hand-foreground": "#424242",
 
     "--incognito-icon-color": "#00000011",
 
-    "--on-primary": "#f0f0f0",
+    "--on-primary": "#1A1204",
     "--on-background": "#121212",
     "--on-background-disabled": "#12121248",
     "--on-surface": "#000000",
@@ -80,12 +80,12 @@
   },
   "key[code=10]": {
     "background": "var(--primary)",
-    "foreground": "var(--on-surface)",
+    "foreground": "var(--on-primary)",
     "margin": "0dp 6dp"
   },
   "key[code=10]:pressed": {
     "background": "var(--primary-variant)",
-    "foreground": "var(--on-surface)"
+    "foreground": "var(--on-primary)"
   },
   "key[code=32]": {
     "background": "var(--surface)",
