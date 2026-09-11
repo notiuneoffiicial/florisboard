@@ -26,7 +26,12 @@ class FlorisEditorInfo private constructor(val base: EditorInfo) {
     val imeOptions = ImeOptions.wrap(base.imeOptions)
 
     val isRichInputEditor: Boolean
-        get() = inputAttributes.type != InputAttributes.Type.NULL
+        // Tiune fork: some apps (Google Contacts' name fields, for one) set
+        // only text flags and a variation — 0x2060, cap-words + person name —
+        // and leave the class bits zero. That is a text field in every way
+        // that matters, and Gboard treats it as one; reading the class alone
+        // made it a raw editor with no suggestions and no composing.
+        get() = inputAttributes.type != InputAttributes.Type.NULL || base.inputType != 0
 
     val isRawInputEditor: Boolean
         get() = !isRichInputEditor

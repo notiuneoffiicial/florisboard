@@ -19,6 +19,9 @@ package dev.patrickgold.florisboard.ime.window
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -227,6 +230,42 @@ fun BoxScope.ImeWindowResizeHandlesFixed() {
                 .background(overlayColor)
         )
 
+        // Tiune fork: the frame the drag is heading for, drawn to scale
+        // against the keyboard as it stands. Nothing is re-laid out until
+        // the finger lifts (ImeWindowController.Editor.previewSpec).
+        val preview by windowController.editor.previewSpec.collectAsState()
+        val rowCount by FlorisImeSizing.rowCountAsState()
+        val smartbarRowCount by FlorisImeSizing.smartbarRowCountAsState()
+        val frameStyle = rememberSnyggThemeQuery(FlorisImeUi.WindowResizeHandle.elementName, attributes)
+        val frameColor by rememberUpdatedState(frameStyle.background(default = Color(0xFFF5A623)))
+        val current = windowSpec
+        val target = preview
+        if (current is ImeWindowSpec.Fixed && target is ImeWindowSpec.Fixed) {
+            Canvas(modifier = Modifier.matchParentSize()) {
+                val dl = (target.props.paddingLeft - current.props.paddingLeft).toPx()
+                val dr = (target.props.paddingRight - current.props.paddingRight).toPx()
+                val db = (target.props.paddingBottom - current.props.paddingBottom).toPx()
+                val curH = current.effectiveKeyboardHeight(rowCount, smartbarRowCount).toPx().coerceAtLeast(1f)
+                val newH = target.effectiveKeyboardHeight(rowCount, smartbarRowCount).toPx()
+                val bottom = size.height - db
+                val top = bottom - size.height * (newH / curH)
+                val rect = Rect(left = dl, top = top, right = size.width - dr, bottom = bottom)
+                val radius = CornerRadius(20.dp.toPx())
+                drawRoundRect(
+                    color = frameColor.copy(alpha = 0.12f),
+                    topLeft = rect.topLeft,
+                    size = rect.size,
+                    cornerRadius = radius,
+                )
+                drawRoundRect(
+                    color = frameColor,
+                    topLeft = rect.topLeft,
+                    size = rect.size,
+                    cornerRadius = radius,
+                    style = Stroke(width = 2.dp.toPx()),
+                )
+            }
+        }
         Row(
             modifier = Modifier
                 .matchParentSize()
@@ -244,19 +283,6 @@ fun BoxScope.ImeWindowResizeHandlesFixed() {
                     imageVector = drawableRes(R.drawable.ic_restart_alt),
                 )
             }
-
-            SnyggIconButton(
-                FlorisImeUi.WindowMoveHandle.elementName,
-                attributes = attributes,
-                onClick = {}
-            ) {
-                SnyggIcon(
-                    elementName = FlorisImeUi.WindowMoveHandle.elementName,
-                    imageVector = drawableRes(R.drawable.ic_drag_pan),
-                    modifier = Modifier.imeWindowMoveHandle(windowController),
-                )
-            }
-
             SnyggIconButton(
                 elementName = FlorisImeUi.WindowResizeAction.elementName,
                 attributes = attributes,
@@ -268,17 +294,14 @@ fun BoxScope.ImeWindowResizeHandlesFixed() {
                 )
             }
         }
-
+        // Four handles, one per side, as Gboard has: height from the top,
+        // width from either side, and the gap beneath from the bottom. The
+        // corners went — eight handles on a phone were eight ways to grab
+        // the wrong one.
         ImeWindowResizeHandle(
             handle = ImeWindowResizeHandle.LEFT,
             modifier = Modifier
                 .align(Alignment.CenterStart),
-            alphaState = animatedAlpha,
-        )
-        ImeWindowResizeHandle(
-            handle = ImeWindowResizeHandle.TOP_LEFT,
-            modifier = Modifier
-                .align(Alignment.TopStart),
             alphaState = animatedAlpha,
         )
         ImeWindowResizeHandle(
@@ -288,21 +311,9 @@ fun BoxScope.ImeWindowResizeHandlesFixed() {
             alphaState = animatedAlpha,
         )
         ImeWindowResizeHandle(
-            handle = ImeWindowResizeHandle.TOP_RIGHT,
-            modifier = Modifier
-                .align(Alignment.TopEnd),
-            alphaState = animatedAlpha,
-        )
-        ImeWindowResizeHandle(
             handle = ImeWindowResizeHandle.RIGHT,
             modifier = Modifier
                 .align(Alignment.CenterEnd),
-            alphaState = animatedAlpha,
-        )
-        ImeWindowResizeHandle(
-            handle = ImeWindowResizeHandle.BOTTOM_RIGHT,
-            modifier = Modifier
-                .align(Alignment.BottomEnd),
             alphaState = animatedAlpha,
         )
         ImeWindowResizeHandle(
@@ -311,14 +322,7 @@ fun BoxScope.ImeWindowResizeHandlesFixed() {
                 .align(Alignment.BottomCenter),
             alphaState = animatedAlpha,
         )
-        ImeWindowResizeHandle(
-            handle = ImeWindowResizeHandle.BOTTOM_LEFT,
-            modifier = Modifier
-                .align(Alignment.BottomStart),
-            alphaState = animatedAlpha,
-        )
     }
-
 }
 
 @Composable

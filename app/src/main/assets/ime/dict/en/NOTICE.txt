@@ -1,0 +1,7 @@
+words.txt: English word frequencies, blended from Peter Norvig's count_1w
+(an excerpt of the Google Web Trillion Word Corpus, norvig.com/ngrams) and
+the OpenSubtitles-derived FrequencyWords en_50k list
+(github.com/hermitdave/FrequencyWords, CC-BY-SA 4.0).
+bigrams.txt: for the 16k most common words, their 12 most common
+followers, from Norvig's count_2w (same source). Trimmed and lowercased;
+bare contractions ("dont") were folded into their spelled forms ("don't").

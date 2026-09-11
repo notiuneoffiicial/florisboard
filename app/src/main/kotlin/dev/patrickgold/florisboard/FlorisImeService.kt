@@ -186,6 +186,48 @@ open class FlorisImeService : LifecycleInputMethodService() {
         fun voiceInputViewOrNull(context: Context): View? {
             return FlorisImeServiceReference.get()?.createVoiceInputView(context)
         }
+
+        /** Tiune fork. What the embedding app's dictation is doing right now,
+         *  for the mic key on the action bar to show: [VOICE_QUIET] (a mic,
+         *  waiting), [VOICE_LISTENING] (a capture is running — the key wears
+         *  the listening icon) or [VOICE_BUSY] (the words are being written —
+         *  the key dims and takes no taps). Written by the embedding service,
+         *  read by [dev.patrickgold.florisboard.ime.smartbar.quickaction.QuickActionButton]. */
+        val voiceInputState = MutableStateFlow(VOICE_QUIET)
+        const val VOICE_QUIET = 0
+        const val VOICE_LISTENING = 1
+        const val VOICE_BUSY = 2
+
+        /** A drawable for the mic key while [voiceInputState] is [VOICE_LISTENING],
+         *  or null to keep the resting icon. */
+        fun voiceInputListeningIconResOrNull(): Int? {
+            return FlorisImeServiceReference.get()?.voiceInputListeningIconRes()?.takeIf { it != 0 }
+        }
+
+        /** Tiune fork. Words the embedding app knows its user uses — names,
+         *  products, terms — for the suggestion provider: valid spellings,
+         *  never auto-corrected, offered as completions. Replaced wholesale by
+         *  the embedding app whenever its list changes. */
+        @Volatile
+        var userWords: Set<String> = emptySet()
+
+        /** Tiune fork. True while the embedding app owns the field's composing
+         *  region (live dictation being written in as it is heard). The
+         *  editor does not touch the region while this is set. */
+        @Volatile
+        var hostOwnsComposing: Boolean = false
+
+        /** Tiune fork. Whether the space bar may apply the best correction. */
+        fun autoCorrectEnabled(): Boolean {
+            return FlorisImeServiceReference.get()?.autoCorrectEnabled() ?: true
+        }
+
+        /** A View the embedding app draws for the whole mic key — its own
+         *  microphone, mark and light — or null for the drawables above. A
+         *  NEW view each call. */
+        fun voiceInputKeyViewOrNull(context: Context): View? {
+            return FlorisImeServiceReference.get()?.createVoiceInputKeyView(context)
+        }
     }
 
     fun hideUi() {
@@ -211,6 +253,27 @@ open class FlorisImeService : LifecycleInputMethodService() {
      *  embedding app rather than to the keyboard, and a key that opens
      *  something else should look like the thing it opens. */
     open fun voiceInputIconTint(): Int = 0
+
+    /** Tiune fork. A vector drawable for the mic key while a capture is
+     *  running (see [voiceInputState]); 0 keeps [voiceInputIconRes]. */
+    @DrawableRes
+    open fun voiceInputListeningIconRes(): Int = 0
+
+    /** Tiune fork. A View for the whole mic key, drawn and animated by the
+     *  embedding app in every state (the microphone at rest, its own mark
+     *  and light while a capture runs); null uses the drawables above.
+     *  Return a new view every time. */
+    open fun createVoiceInputKeyView(context: Context): View? = null
+
+    /** Tiune fork. Whether the space bar applies the best correction to a
+     *  misspelt word. The embedding app keeps the setting. */
+    open fun autoCorrectEnabled(): Boolean = true
+
+    /** Tiune fork. Whether an `onStartInputView` should leave [ImeUiMode.VOICE]
+     *  up. Upstream behaviour is "only on a restart of the same field"; an
+     *  embedding app may know of other starts that are not the user moving
+     *  to a new field. */
+    open fun keepVoiceInputOnStart(restarting: Boolean): Boolean = restarting
 
     /** Tiune fork. Build the panel shown for [ImeUiMode.VOICE]. Called each
      *  time the mode is entered; return a NEW view every time (the previous
@@ -453,8 +516,9 @@ open class FlorisImeService : LifecycleInputMethodService() {
         val editorInfo = FlorisEditorInfo.wrap(info)
         activeState.batchEdit {
             // Tiune fork: a restart of the same field (apps do this on every
-            // commit) must not throw the user out of a dictation in progress.
-            val keepVoice = activeState.imeUiMode == ImeUiMode.VOICE && restarting
+            // commit) must not throw the user out of a dictation in progress;
+            // the embedding app can name other moments (keepVoiceInputOnStart).
+            val keepVoice = activeState.imeUiMode == ImeUiMode.VOICE && keepVoiceInputOnStart(restarting)
             if (!keepVoice && (activeState.imeUiMode != ImeUiMode.CLIPBOARD || prefs.clipboard.historyHideOnNextTextField.get())) {
                 activeState.imeUiMode = ImeUiMode.TEXT
             }

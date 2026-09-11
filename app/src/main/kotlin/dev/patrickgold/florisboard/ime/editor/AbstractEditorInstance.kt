@@ -149,14 +149,21 @@ abstract class AbstractEditorInstance(context: Context) {
             activeCursorCapsMode = content.cursorCapsMode()
             activeContent = content
             keyboardManager.reevaluateInputShiftState()
-            ic.setComposingRegion(content.composing)
+            // Tiune fork: while the embedding app is writing live dictation
+            // into the field as composing text, that region is its, not the
+            // keyboard's word-under-the-caret. Re-marking it here shrank it
+            // to the last word on every update, and the next batch of live
+            // words landed after the rest instead of replacing them.
+            if (!FlorisImeService.hostOwnsComposing) {
+                ic.setComposingRegion(content.composing)
+            }
         }
     }
 
     protected fun handleMassSelectionUpdate(newSelection: EditorRange, composing: EditorRange) {
         activeCursorCapsMode = InputAttributes.CapsMode.NONE
         activeContent = EditorContent.selectionOnly(newSelection)
-        if (composing.isValid) {
+        if (composing.isValid && !FlorisImeService.hostOwnsComposing) {
             currentInputConnection()?.setComposingRegion(EditorRange.Unspecified)
         }
         _lastCommitPosition.handleUpdateSelection(newSelection)
@@ -203,7 +210,14 @@ abstract class AbstractEditorInstance(context: Context) {
             activeCursorCapsMode = content.cursorCapsMode()
             activeContent = content
             keyboardManager.reevaluateInputShiftState()
-            if (content.composing != composing) {
+            // Tiune fork: this is the path that runs after EVERY selection
+            // change — including the one each batch of live dictation
+            // causes. While the embedding app owns the composing region
+            // (live words being written in as they are heard), re-marking
+            // it as the word under the caret shrank it to the last word,
+            // and the next batch landed after the rest instead of
+            // replacing them: the sentence pasted again and again.
+            if (content.composing != composing && !FlorisImeService.hostOwnsComposing) {
                 ic.setComposingRegion(content.composing)
             }
         }
@@ -510,6 +524,9 @@ abstract class AbstractEditorInstance(context: Context) {
         val content = activeContent
         val ic = currentInputConnection()
         if (activeInfo.isRawInputEditor || ic == null) return
+        // Tiune fork: see handleSelectionUpdate — the region is not ours to
+        // re-mark while live dictation is in it.
+        if (FlorisImeService.hostOwnsComposing) return
         runBlocking {
             val newContent = content.generateCopy()
             if (newContent.composing != content.composing) {

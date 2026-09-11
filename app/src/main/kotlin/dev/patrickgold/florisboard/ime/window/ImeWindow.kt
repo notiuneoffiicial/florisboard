@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.roundToIntRect
 import dev.patrickgold.florisboard.R
 import dev.patrickgold.florisboard.app.devtools.DevtoolsOverlay
 import dev.patrickgold.florisboard.ime.ImeUiMode
+import dev.patrickgold.florisboard.ime.keyboard.FlorisImeSizing
 import dev.patrickgold.florisboard.ime.clipboard.ClipboardInputLayout
 import dev.patrickgold.florisboard.ime.input.LocalInputFeedbackController
 import dev.patrickgold.florisboard.ime.keyboard.ProvideKeyboardRowBaseHeight
@@ -153,6 +154,23 @@ fun BoxScope.ImeWindow() {
         )
     }
 
+    // Tiune fork: while the resize editor is on, the window reaches up to
+    // the tallest the keyboard may be, with the keys still at its foot, so
+    // the frame a drag draws has room to grow upward (Gboard does the
+    // same). It is padding OUTSIDE the painted window, so the app shows
+    // through it; it still counts as the window for touch, which is what
+    // lets the top handle be dragged into it.
+    val editorState by windowController.editor.state.collectAsState()
+    val rowCount by FlorisImeSizing.rowCountAsState()
+    val smartbarRowCount by FlorisImeSizing.smartbarRowCountAsState()
+    val editorHeadroom = if (editorState.isEnabled && windowSpec is ImeWindowSpec.Fixed) {
+        val fixed = windowSpec as ImeWindowSpec.Fixed
+        (fixed.constraints.maxKeyboardHeight - fixed.effectiveKeyboardHeight(rowCount, smartbarRowCount))
+            .coerceAtLeast(0.dp)
+    } else {
+        0.dp
+    }
+
     FloatingDockToFixedIndicator()
 
     SnyggBox(
@@ -163,6 +181,7 @@ fun BoxScope.ImeWindow() {
             .ifIsInstance<ImeWindowProps.Fixed>(windowSpec.props) {
                 Modifier
                     .fillMaxWidth()
+                    .padding(top = editorHeadroom)
             }
             .ifIsInstance<ImeWindowProps.Floating>(windowSpec.props) { props ->
                 Modifier
@@ -195,7 +214,6 @@ private fun ImeInnerWindow() {
 
     val state by keyboardManager.activeState.collectAsState()
     val windowSpec by windowController.activeWindowSpec.collectAsState()
-
     ProvideActualLayoutDirection {
         val layoutDirection = LocalLayoutDirection.current
         LaunchedEffect(layoutDirection) {

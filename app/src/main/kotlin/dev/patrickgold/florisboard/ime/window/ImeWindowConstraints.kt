@@ -141,10 +141,14 @@ sealed class ImeWindowConstraints(rootInsets: ImeInsets.Root) {
                 ImeFormFactor.Type.TABLET_PORTRAIT -> 0.22f
                 ImeFormFactor.Type.PHONE_LANDSCAPE -> 0.47f
                 // Tiune fork: Gboard 18 on a Pixel 7 Pro (411x891dp) draws
-                // 48dp rows — 36dp keys, 12dp apart — for 192dp of keys, which
-                // is 0.2192 of the 876dp this baseline measures there. Upstream's
-                // 0.26 gave 57dp rows and put the top row 30dp above Gboard's.
-                ImeFormFactor.Type.PHONE_PORTRAIT -> 0.2192f
+                // 48dp rows — 0.2192 of the 876dp this baseline measures
+                // there — and that is what the first builds matched. Used for
+                // a day, it read as too small: the user dragged the keyboard
+                // up to 56dp rows and asked for that as the default (2026-09-11).
+                // 224dp of keys is 0.2557 of the baseline. Upstream's 0.26 was
+                // within a hair of this all along; what it got wrong was
+                // the bar and the margins, which are set below.
+                ImeFormFactor.Type.PHONE_PORTRAIT -> 0.2557f
             }
             (baselineScreen.height * factor).coerceIn(minKeyboardHeight, maxKeyboardHeight)
         }

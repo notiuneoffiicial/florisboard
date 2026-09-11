@@ -16,6 +16,8 @@
 
 package dev.patrickgold.florisboard.ime.smartbar.quickaction
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -25,14 +27,19 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import dev.patrickgold.compose.tooltip.PlainTooltip
@@ -44,6 +51,7 @@ import dev.patrickgold.florisboard.ime.keyboard.computeLabel
 import dev.patrickgold.florisboard.ime.text.key.KeyCode
 import dev.patrickgold.florisboard.ime.text.keyboard.TextKeyData
 import dev.patrickgold.florisboard.ime.theme.FlorisImeUi
+import org.florisboard.lib.snygg.SnyggQueryAttributes
 import org.florisboard.lib.snygg.SnyggSelector
 import org.florisboard.lib.snygg.ui.SnyggBox
 import org.florisboard.lib.snygg.ui.SnyggIcon
@@ -131,14 +139,23 @@ fun QuickActionButton(
                         // Tiune fork: the mic key belongs to the embedding app,
                         // and wears that app's colour rather than the
                         // keyboard's key tint. Every other key is untouched.
+                        val isVoiceKey = action.data.code == KeyCode.VOICE_INPUT
                         val tint = remember(action) {
-                            if (action.data.code == KeyCode.VOICE_INPUT) {
+                            if (isVoiceKey) {
                                 FlorisImeService.voiceInputIconTintOrNull()?.let { Color(it) }
                             } else {
                                 null
                             }
                         }
-                        if (imageVector != null) {
+                        if (isVoiceKey && imageVector != null) {
+                            VoiceKeyIcon(
+                                restingIcon = imageVector,
+                                tint = tint,
+                                elementName = "$elementName-icon",
+                                attributes = attributes,
+                                selector = selector,
+                            )
+                        } else if (imageVector != null) {
                             SnyggBox(
                                 elementName = "$elementName-icon",
                                 attributes = attributes,
@@ -176,6 +193,46 @@ fun QuickActionButton(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Tiune fork. The mic key's face.
+ *
+ * When the embedding app provides a view for the key it fills the key's
+ * whole box and draws every state itself — the microphone at rest, and its
+ * own mark, light and motion while a capture runs — so the change between
+ * them is one continuous drawing rather than two composables swapped. The
+ * drawable fallbacks below are for an app that provides none.
+ */
+@Composable
+private fun VoiceKeyIcon(
+    restingIcon: ImageVector,
+    tint: Color?,
+    elementName: String,
+    attributes: SnyggQueryAttributes,
+    selector: SnyggSelector?,
+) {
+    val context = LocalContext.current
+    val hostView = remember { FlorisImeService.voiceInputKeyViewOrNull(context) }
+    if (hostView != null) {
+        AndroidView(modifier = Modifier.fillMaxSize(), factory = { hostView })
+        return
+    }
+    val state by FlorisImeService.voiceInputState.collectAsState()
+    val listeningIcon = remember(restingIcon) {
+        FlorisImeService.voiceInputListeningIconResOrNull()
+            ?.let { ImageVector.vectorResource(context.theme, context.resources, it) }
+            ?: restingIcon
+    }
+    Crossfade(
+        targetState = state != FlorisImeService.VOICE_QUIET,
+        animationSpec = tween(durationMillis = 260),
+        label = "voiceKeyIcon",
+    ) { live ->
+        SnyggBox(elementName = elementName, attributes = attributes, selector = selector) {
+            SnyggIcon(imageVector = if (live) listeningIcon else restingIcon, tint = tint)
         }
     }
 }

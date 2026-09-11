@@ -74,6 +74,12 @@ data class QuickActionArrangement(
                 // bar. The keyboard is configured from the host app's Settings,
                 // and the bar holds only what someone does while typing.
                 QuickAction.InsertKey(TextKeyData.IME_UI_MODE_CLIPBOARD),
+                // Tiune fork: resizing the keyboard is on the bar itself, the
+                // way Gboard's is — ahead of emoji, which also has a key on
+                // the bottom row, so a taller keyboard (whose bar fits fewer
+                // actions) drops emoji into the overflow before it drops
+                // resize. Incognito moved behind the overflow.
+                QuickAction.InsertKey(TextKeyData.TOGGLE_RESIZE_MODE),
                 QuickAction.InsertKey(TextKeyData.IME_UI_MODE_MEDIA),
                 QuickAction.InsertKey(TextKeyData.TOGGLE_INCOGNITO_MODE),
                 QuickAction.InsertKey(TextKeyData.ARROW_UP),

@@ -9,6 +9,7 @@
     "--background-variant": "#313131",
     "--surface": "#424242",
     "--surface-variant": "#616161",
+    "--surface-function": "#555555",
     "--popup-surface": "#757575",
     "--focused-popup-surface": "#bdbdbd",
     "--drag-marker": "rgb(255,0,0)",
@@ -24,7 +25,8 @@
 
     "--shape": "rounded-corner(8dp, 8dp, 8dp, 8dp)",
     "--shape-variant": "rounded-corner(12dp, 12dp, 12dp, 12dp)",
-    "--shape-chip": "rounded-corner(50%, 50%, 50%, 50%)"
+    "--shape-chip": "rounded-corner(50%, 50%, 50%, 50%)",
+    "--shape-pill": "rounded-corner(50%, 50%, 50%, 50%)"
   },
 
   "window": {
@@ -76,15 +78,31 @@
   },
   "key[code=10]": {
     "background": "var(--primary)",
-    "foreground": "var(--on-primary)"
+    "foreground": "var(--on-primary)",
+    "shape": "var(--shape-pill)"
   },
   "key[code=10]:pressed": {
     "background": "var(--primary-variant)",
     "foreground": "var(--on-primary)"
   },
+  "key[code=-11,-7,-201,-202,-203,-204,-205,-212,-227]": {
+    "background": "var(--surface-function)",
+    "shape": "var(--shape-pill)"
+  },
+  "key[group=1,2]": {
+    "background": "var(--surface-function)",
+    "shape": "var(--shape-pill)"
+  },
+  "key[code=-11,-7,-201,-202,-203,-204,-205,-212,-227]:pressed": {
+    "background": "var(--surface-variant)"
+  },
+  "key[group=1,2]:pressed": {
+    "background": "var(--surface-variant)"
+  },
   "key[code=32]": {
     "background": "var(--surface)",
     "foreground": "var(--on-surface-variant)",
+    "shape": "var(--shape-pill)",
     "font-size": "12sp",
     "text-overflow": "ellipsis"
   },

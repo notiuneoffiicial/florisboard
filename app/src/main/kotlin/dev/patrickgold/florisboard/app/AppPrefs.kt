@@ -439,7 +439,9 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         )
         val hapticFeatKeyRepeatedAction = boolean(
             key = "input_feedback__haptic_feat_key_repeated_action",
-            default = true,
+            // Tiune fork: a held backspace deletes quietly; the buzz on every
+            // repeat read as a fault, not feedback.
+            default = false,
         )
         val hapticFeatGestureSwipe = boolean(
             key = "input_feedback__haptic_feat_gesture_swipe",
@@ -505,7 +507,9 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         )
         val hintedSymbolsEnabled = boolean(
             key = "keyboard__hinted_symbols_enabled",
-            default = true,
+            // Tiune fork: off, like Gboard — the number hints on the top row
+            // stay, the symbol hints on every other key go.
+            default = false,
         )
         val hintedSymbolsMode = enum(
             key = "keyboard__hinted_symbols_mode",
@@ -521,7 +525,8 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         )
         val spaceBarMode = enum(
             key = "keyboard__space_bar_display_mode",
-            default = SpaceBarMode.CURRENT_LANGUAGE,
+            // Tiune fork: a bare space bar, like Gboard's.
+            default = SpaceBarMode.NOTHING,
         )
         val capitalizationBehavior = enum(
             key = "keyboard__capitalization_behavior",
@@ -698,11 +703,15 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         )
         val enabled = boolean(
             key = "suggestion__enabled",
-            default = false,
+            // Tiune fork: on. This is also what lets the keyboard compose the
+            // word being typed, which completions and corrections need.
+            default = true,
         )
         val displayMode = enum(
             key = "suggestion__display_mode",
-            default = CandidatesDisplayMode.DYNAMIC_SCROLLABLE,
+            // Tiune fork: three candidates sharing the bar evenly, Gboard's
+            // way; the scrollable mode bunched them against the left edge.
+            default = CandidatesDisplayMode.CLASSIC,
         )
         val blockPossiblyOffensive = boolean(
             key = "suggestion__block_possibly_offensive",

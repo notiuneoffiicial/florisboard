@@ -474,12 +474,23 @@ class ImeWindowController(
             state.value = editorStateOf(keepEnabled)
         }
 
+        /**
+         * Tiune fork. The size a resize drag is heading for, while the drag
+         * lasts. The keyboard itself is not re-laid out until the finger
+         * lifts — laying out forty keys on every pointer move is what made
+         * resizing stutter — so the drag draws this as a frame instead, and
+         * [endResizeGesture] applies it once.
+         */
+        val previewSpec = MutableStateFlow<ImeWindowSpec?>(null)
+
         fun beginResizeGesture(): ImeWindowSpec {
             state.value = EditorState.ACTIVE_RESIZE_GESTURE
+            previewSpec.value = null
             return activeWindowSpec.value
         }
 
         fun endResizeGesture(spec: ImeWindowSpec) {
+            previewSpec.value = null
             var keepEnabled = true
             updateWindowConfig { config ->
                 when (spec) {
@@ -497,12 +508,16 @@ class ImeWindowController(
         }
 
         fun onSpecUpdated(spec: ImeWindowSpec) {
-            if (state.value.isEnabled) {
+            if (!state.value.isEnabled) return
+            if (state.value.isResizeGesture && spec is ImeWindowSpec.Fixed) {
+                previewSpec.value = spec
+            } else {
                 activeWindowSpec.value = spec
             }
         }
 
         fun cancelGesture() {
+            previewSpec.value = null
             state.value = EditorState.INACTIVE
             syncFromPrefs()
         }

@@ -416,5 +416,9 @@ enum class FlorisImeUi(val elementName: String, val resId: Int?) {
         const val Mode = "mode"
         const val ShiftState = "shiftstate"
         const val WindowMode = "windowmode"
+        /** Tiune fork: the key's `groupId` from the layout JSON, so a stylesheet
+         *  can address the bottom row's punctuation (group 1 and 2) without
+         *  catching the same characters in the symbols grid. */
+        const val Group = "group"
     }
 }

@@ -97,6 +97,12 @@ sealed class ImeWindowSpec {
             rowHeight * constraints.smartbarDynamicScalingFactor
     }
 
+    /** Tiune fork. The height the keyboard is actually drawn at for this
+     *  spec — rows and bar included — so a resize preview can be drawn to
+     *  scale against the current one. */
+    fun effectiveKeyboardHeight(rowCount: Int, smartbarRowCount: Int): Dp =
+        props.keyboardHeight.toEffective(rowCount, smartbarRowCount)
+
     protected fun Dp.toEffective(rowCount: Int, smartbarRowCount: Int): Dp = let { keyboardHeight ->
         require(rowCount in 4..6)
         require(smartbarRowCount in 0..2)
