@@ -19,6 +19,13 @@ package dev.patrickgold.florisboard.ime.editor
 import android.content.ClipDescription
 import android.content.ContentUris
 import android.content.Context
+import android.graphics.Color
+import android.os.Handler
+import android.os.Looper
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.BackgroundColorSpan
+import android.text.style.SuggestionSpan
 import android.view.KeyEvent
 import androidx.core.view.inputmethod.InputConnectionCompat
 import androidx.core.view.inputmethod.InputContentInfoCompat
@@ -34,6 +41,7 @@ import dev.patrickgold.florisboard.ime.input.InputShiftState
 import dev.patrickgold.florisboard.ime.keyboard.IncognitoMode
 import dev.patrickgold.florisboard.ime.keyboard.KeyboardMode
 import dev.patrickgold.florisboard.ime.nlp.SuggestionCandidate
+import dev.patrickgold.florisboard.ime.nlp.latin.AutocorrectMemory
 import dev.patrickgold.florisboard.ime.text.composing.Appender
 import dev.patrickgold.florisboard.ime.text.composing.Composer
 import dev.patrickgold.florisboard.ime.text.key.KeyVariation
@@ -62,9 +70,30 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
     val phantomSpace = PhantomSpaceState()
     val massSelection = MassSelectionState()
 
+    // ---- Tiune fork: what the space bar changed, showing it, taking it back ----
+
+    /** A correction the keyboard just applied: what was typed, what it
+     *  became, the separator that followed and where the caret is after
+     *  it. Alive until the next key or a tap elsewhere. */
+    class Revertable(val typed: String, val corrected: String, val separator: String, val caret: Int)
+
+    /** Set by [noteAutocorrect] just before the candidate replaces the
+     *  word; consumed by the separator commit that follows. */
+    private var justCorrected: Pair<String, String>? = null
+    private var justCorrectedStart = -1
+
+    var revertable: Revertable? = null
+        private set
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var highlightGen = 0
+
     private fun currentInputConnection() = FlorisImeService.currentInputConnection()
 
     override fun handleStartInputView(editorInfo: FlorisEditorInfo, isRestart: Boolean) {
+        // Tiune fork: a new field is a new conversation with autocorrect.
+        if (!isRestart) AutocorrectMemory.startSession()
+        dropAutocorrectState(finishHighlight = false)
         if (!prefs.correction.rememberCapsLockState.get()) {
             activeState.inputShiftState = InputShiftState.UNSHIFTED
         }
@@ -137,6 +166,21 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         }
     }
 
+    override fun onUnexpectedSelectionUpdate(newSelection: EditorRange) {
+        // Tiune fork: the caret moving away from the corrected word (a tap
+        // in the text, the app itself) ends the chance to take the
+        // correction back with backspace, and the highlight with it. The
+        // highlight's own frames keep the caret where it is.
+        revertable?.let { r ->
+            if (newSelection.start != r.caret || newSelection.isSelectionMode) dropAutocorrectState(finishHighlight = true)
+        }
+    }
+
+    override fun handleFinishInputView() {
+        dropAutocorrectState(finishHighlight = false)
+        super.handleFinishInputView()
+    }
+
     override fun determineComposingEnabled(): Boolean {
         return activeState.isComposingEnabled && nlpManager.isSuggestionOn()
     }
@@ -162,6 +206,7 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
     fun setSelection(start: Int, end: Int): Boolean {
         autoSpace.setInactive()
         phantomSpace.setInactive()
+        dropAutocorrectState(finishHighlight = true)
         val selection = EditorRange.normalized(start, end)
         return super.setSelection(selection)
     }
@@ -197,6 +242,19 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
     }
 
     override fun commitChar(char: String): Boolean {
+        val endsWord = char.isNotEmpty() && !char[0].isLetterOrDigit() && char[0] != '\''
+        val ic = currentInputConnection()
+        ic?.beginBatchEdit()
+        val correctedBefore = justCorrected != null
+        if (endsWord) cancelHighlight() else dropAutocorrectState(finishHighlight = true)
+        if (endsWord && !correctedBefore) underlineTypoIfAny()
+        val ok = commitCharInner(char)
+        if (ok && endsWord) afterSeparator()
+        ic?.endBatchEdit()
+        return ok
+    }
+
+    private fun commitCharInner(char: String): Boolean {
         val isInsertAutoSpaceBeforeChar = shouldInsertAutoSpaceBefore(char)
         val isInsertAutoSpaceAfterChar = shouldInsertAutoSpaceAfter(char)
         val isDeletePreviousSpace = isInsertAutoSpaceAfterChar && autoSpace.isActive
@@ -228,14 +286,143 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      * @return True on success, false if an error occurred or the input connection is invalid.
      */
     override fun commitText(text: String): Boolean {
+        val endsWord = text.isNotEmpty() && !text[0].isLetterOrDigit() && text[0] != '\''
+        val ic = currentInputConnection()
+        ic?.beginBatchEdit()
+        val correctedBefore = justCorrected != null
+        if (endsWord) cancelHighlight() else dropAutocorrectState(finishHighlight = true)
+        if (endsWord && !correctedBefore) underlineTypoIfAny()
         val isPhantomSpaceActive = phantomSpace.determine(text)
         autoSpace.setInactive()
         phantomSpace.setInactive()
-        return if (isPhantomSpaceActive) {
+        val ok = if (isPhantomSpaceActive) {
             super.commitText("$SPACE$text")
         } else {
             super.commitText(text)
         }
+        if (ok && endsWord) afterSeparator()
+        ic?.endBatchEdit()
+        return ok
+    }
+
+    /**
+     * Tiune fork. The keyboard is about to replace the word being typed
+     * with the correction it chose itself. Remembered so that the
+     * separator that follows can show the change and offer it back.
+     */
+    fun noteAutocorrect(typed: String, corrected: String) {
+        val content = activeContent
+        justCorrected = typed to corrected
+        justCorrectedStart = if (content.composing.isValid) content.composing.start else -1
+        AutocorrectMemory.recordApplied(typed, corrected)
+    }
+
+    /** Forgets a correction in flight, the revert window and the highlight. */
+    private fun dropAutocorrectState(finishHighlight: Boolean) {
+        justCorrected = null
+        revertable = null
+        if (finishHighlight) cancelHighlight() else highlightGen++
+        highlightOwnsComposing = false
+    }
+
+    /** After the separator that followed a correction: open the revert
+     *  window and light the corrected word up. */
+    private fun afterSeparator() {
+        val (typed, corrected) = justCorrected ?: return
+        justCorrected = null
+        val start = justCorrectedStart
+        val expected = expectedContent() ?: return
+        val end = start + corrected.length
+        val caret = expected.selection.start
+        val sepLen = caret - end
+        if (start < 0 || sepLen !in 1..3) return
+        val before = expected.textBeforeSelection
+        if (before.length < corrected.length + sepLen) return
+        val tail = before.substring(before.length - corrected.length - sepLen)
+        if (!tail.startsWith(corrected)) return
+        revertable = Revertable(typed, corrected, tail.substring(corrected.length), caret)
+        startHighlight(start, end, corrected, caret)
+    }
+
+    /**
+     * Tiune fork. The backspace right after a correction puts the typed
+     * word back — with its separator, so typing carries on — and tells
+     * the memory the user meant it. Like Gboard.
+     */
+    fun revertAutocorrect(): Boolean {
+        val r = revertable ?: return false
+        revertable = null
+        val content = activeContent
+        val tail = r.corrected + r.separator
+        if (activeInfo.isRawInputEditor || content.selection.isSelectionMode ||
+            content.selection.start != r.caret || !content.textBeforeSelection.endsWith(tail)) {
+            cancelHighlight()
+            return false
+        }
+        cancelHighlight()
+        val ok = replaceBeforeCursor(tail.length, r.typed + r.separator)
+        if (ok) AutocorrectMemory.insist(r.typed)
+        return ok
+    }
+
+    /**
+     * The corrected word, washed in Tiune amber that comes in and fades
+     * out (about two thirds of a second) — the field's own way of saying
+     * "this was changed". Drawn as composing text with a background span,
+     * which every plain text field and the WebView honour; a field that
+     * ignores spans simply shows nothing. Any key or tap ends it early.
+     */
+    private fun startHighlight(start: Int, end: Int, word: String, caret: Int) {
+        if (activeInfo.isRawInputEditor || currentInputConnection() == null) return
+        val gen = ++highlightGen
+        highlightOwnsComposing = true
+        fun frame(alpha: Int, last: Boolean) = Runnable {
+            if (gen != highlightGen) return@Runnable
+            val ic = currentInputConnection() ?: return@Runnable
+            ic.beginBatchEdit()
+            if (last) {
+                highlightOwnsComposing = false
+                ic.finishComposingText()
+            } else {
+                ic.setComposingRegion(start, end)
+                val s = SpannableString(word)
+                s.setSpan(BackgroundColorSpan(Color.argb(alpha, 0xF5, 0xA6, 0x23)), 0, s.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                ic.setComposingText(s, 1)
+                ic.setSelection(caret, caret)
+            }
+            ic.endBatchEdit()
+        }
+        for ((at, alpha) in HIGHLIGHT_FRAMES) mainHandler.postDelayed(frame(alpha, false), at)
+        mainHandler.postDelayed(frame(0, true), HIGHLIGHT_END)
+    }
+
+    private fun cancelHighlight() {
+        highlightGen++
+        if (!highlightOwnsComposing) return
+        highlightOwnsComposing = false
+        currentInputConnection()?.finishComposingText()
+    }
+
+    /**
+     * Tiune fork. The word being finished is a misspelling — English says
+     * so, and it is not the user's, not Roman Urdu, not one they insisted
+     * on — so it goes into the field with the red line every text field
+     * draws for a misspelt word, and the fixes behind a tap on it. Done
+     * by replacing the composing word with itself plus the span, which is
+     * no visible change. Skipped while an edit of ours is still in flight,
+     * because then the word here is a keystroke behind the field.
+     */
+    private fun underlineTypoIfAny() {
+        val content = activeContent
+        if (activeInfo.isRawInputEditor || !content.composing.isValid || content.composingText.isBlank()) return
+        if (activeState.keyVariation != KeyVariation.NORMAL || hasPendingEdit()) return
+        val fixes = nlpManager.typoSuggestionsOrNull(content) ?: return
+        val ic = currentInputConnection() ?: return
+        val s = SpannableString(content.composingText)
+        val span = SuggestionSpan(appContext, fixes.take(SuggestionSpan.SUGGESTIONS_MAX_SIZE).toTypedArray(),
+            SuggestionSpan.FLAG_EASY_CORRECT or SuggestionSpan.FLAG_MISSPELLED)
+        s.setSpan(span, 0, s.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        ic.commitText(s, 1)
     }
 
     /**
@@ -252,6 +439,8 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
     fun commitCompletion(candidate: SuggestionCandidate): Boolean {
         val text = candidate.text.toString()
         if (text.isEmpty() || activeInfo.isRawInputEditor) return false
+        revertable = null
+        cancelHighlight()
         val content = activeContent
         return if (content.composing.isValid) {
             phantomSpace.setActive(showComposingRegion = false, candidate = candidate)
@@ -282,6 +471,7 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      */
     fun commitGesture(text: String): Boolean {
         if (text.isEmpty() || activeInfo.isRawInputEditor) return false
+        dropAutocorrectState(finishHighlight = true)
         val isPhantomSpaceActive = phantomSpace.determine(text, forceActive = true)
         phantomSpace.setActive(showComposingRegion = true)
         return if (isPhantomSpaceActive) {
@@ -341,6 +531,7 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      * @return True on success, false if an error occurred or the input connection is invalid.
      */
     fun deleteBackwards(unit: OperationUnit): Boolean {
+        dropAutocorrectState(finishHighlight = true)
         val content = activeContent
         if (unit == OperationUnit.CHARACTERS) {
             if (phantomSpace.isActive && content.currentWord.isValid && prefs.glide.immediateBackspaceDeletesWord.get()) {
@@ -364,6 +555,7 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      * @return True on success, false if an error occurred or the input connection is invalid.
      */
     fun deleteForwards(unit: OperationUnit): Boolean {
+        dropAutocorrectState(finishHighlight = true)
         val content = activeContent
         autoSpace.setInactive()
         phantomSpace.setInactive()
@@ -663,3 +855,10 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         }
     }
 }
+
+/** Tiune fork. The highlight's frames: (ms after the separator, alpha of
+ *  the amber wash). In over 120 ms, a hold, out over half a second. */
+private val HIGHLIGHT_FRAMES: List<Pair<Long, Int>> = listOf(
+    0L to 40, 40L to 80, 90L to 110, 320L to 110, 380L to 88, 440L to 66, 500L to 44, 560L to 24, 620L to 8,
+)
+private const val HIGHLIGHT_END = 680L

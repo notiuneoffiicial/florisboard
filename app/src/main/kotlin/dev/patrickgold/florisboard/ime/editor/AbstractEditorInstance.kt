@@ -69,6 +69,18 @@ abstract class AbstractEditorInstance(context: Context) {
     private val scope = MainScope()
     protected val breakIterators = BreakIteratorGroup()
 
+    /** Tiune fork. True while the corrected word is being highlighted as
+     *  composing text (see EditorInstance): the region is the highlight's,
+     *  not the word under the caret, and is left alone like the host's. */
+    @Volatile
+    var highlightOwnsComposing: Boolean = false
+
+    /** Tiune fork. Whether someone other than the editor owns the composing
+     *  region right now — the host app writing live dictation, or the
+     *  autocorrect highlight. */
+    protected fun composingOwnedElsewhere(): Boolean =
+        FlorisImeService.hostOwnsComposing || highlightOwnsComposing
+
     private val _activeInfoFlow = MutableStateFlow(FlorisEditorInfo.Unspecified)
     val activeInfoFlow = _activeInfoFlow.asStateFlow()
     inline var activeInfo: FlorisEditorInfo
@@ -154,7 +166,7 @@ abstract class AbstractEditorInstance(context: Context) {
             // keyboard's word-under-the-caret. Re-marking it here shrank it
             // to the last word on every update, and the next batch of live
             // words landed after the rest instead of replacing them.
-            if (!FlorisImeService.hostOwnsComposing) {
+            if (!composingOwnedElsewhere()) {
                 ic.setComposingRegion(content.composing)
             }
         }
@@ -163,7 +175,7 @@ abstract class AbstractEditorInstance(context: Context) {
     protected fun handleMassSelectionUpdate(newSelection: EditorRange, composing: EditorRange) {
         activeCursorCapsMode = InputAttributes.CapsMode.NONE
         activeContent = EditorContent.selectionOnly(newSelection)
-        if (composing.isValid && !FlorisImeService.hostOwnsComposing) {
+        if (composing.isValid && !composingOwnedElsewhere()) {
             currentInputConnection()?.setComposingRegion(EditorRange.Unspecified)
         }
         _lastCommitPosition.handleUpdateSelection(newSelection)
@@ -192,6 +204,7 @@ abstract class AbstractEditorInstance(context: Context) {
             keyboardManager.reevaluateInputShiftState()
             return
         }
+        onUnexpectedSelectionUpdate(newSelection)
 
         // Get Text
         val textBeforeSelection =
@@ -217,11 +230,15 @@ abstract class AbstractEditorInstance(context: Context) {
             // it as the word under the caret shrank it to the last word,
             // and the next batch landed after the rest instead of
             // replacing them: the sentence pasted again and again.
-            if (content.composing != composing && !FlorisImeService.hostOwnsComposing) {
+            if (content.composing != composing && !composingOwnedElsewhere()) {
                 ic.setComposingRegion(content.composing)
             }
         }
     }
+
+    /** Tiune fork. A selection update that is not the echo of an edit of
+     *  ours: the user tapped in the text, or the app moved the caret. */
+    protected open fun onUnexpectedSelectionUpdate(newSelection: EditorRange) {}
 
     open fun handleFinishInputView() {
         reset()
@@ -450,6 +467,49 @@ abstract class AbstractEditorInstance(context: Context) {
         }
         ic.endBatchEdit()
         return true
+    }
+
+    /**
+     * Tiune fork. Replaces the [oldLength] characters before the caret with
+     * [newText], the way the space bar's correction is put back: one batch,
+     * the expected content queued so the editor's own state stays right.
+     */
+    protected fun replaceBeforeCursor(oldLength: Int, newText: String): Boolean {
+        val ic = currentInputConnection() ?: return false
+        val content = activeContent
+        val selection = content.selection
+        if (activeInfo.isRawInputEditor || selection.isNotValid || selection.isSelectionMode ||
+            content.textBeforeSelection.length < oldLength) return false
+        ic.beginBatchEdit()
+        runBlocking {
+            val newSelection = EditorRange.cursor(selection.start - oldLength + newText.length)
+            val newContent = content.generateCopy(
+                selection = newSelection,
+                textBeforeSelection = buildString {
+                    append(content.textBeforeSelection.dropLast(oldLength))
+                    append(newText)
+                },
+                selectedText = "",
+            )
+            expectedContentQueue.push(newContent)
+            ic.finishComposingText()
+            ic.deleteSurroundingText(oldLength, 0)
+            ic.commitText(newText, 1)
+            ic.setComposingRegion(newContent.composing)
+            _lastCommitPosition.handleCommit(newContent.selection)
+        }
+        ic.endBatchEdit()
+        return true
+    }
+
+    /**
+     * Tiune fork. Whether an edit of ours is still waiting for the editor
+     * to report back. While one is, [activeContent] is a keystroke behind
+     * and must not be used to touch the text.
+     */
+    protected fun hasPendingEdit(): Boolean {
+        val expected = expectedContent() ?: return false
+        return expected.selection != activeContent.selection || expected.composing != activeContent.composing
     }
 
     protected suspend fun deleteAroundCursor(unit: OperationUnit, scope: OperationScope, n: Int = 0): Boolean {

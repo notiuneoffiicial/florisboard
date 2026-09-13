@@ -248,7 +248,38 @@ class NlpManager(context: Context) {
     }
 
     fun getAutoCommitCandidate(): SuggestionCandidate? {
-        return activeCandidates.firstOrNull { it.isEligibleForAutoCommit }
+        // Tiune fork. The candidates are computed in the background, so the
+        // list here can belong to the word as it was a keystroke ago —
+        // "Mei" while the field already says "Mein" — and the space bar
+        // would apply "men" to a word it was never computed for. When the
+        // list is not for the word under the caret, compute it now; the
+        // provider is a dictionary lookup once loaded.
+        val content = editorInstance.activeContent
+        val typed = content.composingText.trim()
+        val candidates = activeCandidates
+        val word = candidates.firstOrNull { it is WordSuggestionCandidate } as? WordSuggestionCandidate
+        val stale = typed.isNotEmpty() && (word == null || (word.forInput != null && word.forInput != typed))
+        if (!stale) return candidates.firstOrNull { it.isEligibleForAutoCommit }
+        if (!(keyboardManager.activeState.isComposingEnabled || isSuggestionOn())) return null
+        val subtype = subtypeManager.activeSubtype
+        return runBlocking {
+            getSuggestionProvider(subtype).suggest(
+                subtype = subtype,
+                content = content,
+                maxCandidateCount = 8,
+                allowPossiblyOffensive = !prefs.suggestion.blockPossiblyOffensive.get(),
+                isPrivateSession = keyboardManager.activeState.isIncognitoMode,
+            )
+        }.firstOrNull { it.isEligibleForAutoCommit }
+    }
+
+    /** Tiune fork. The fixes for the word being typed when it is a
+     *  misspelling, or null when it is fine (or unknown yet). Decided now,
+     *  for marking the word as it is finished. */
+    fun typoSuggestionsOrNull(content: EditorContent): Array<String>? {
+        val subtype = subtypeManager.activeSubtype
+        val provider = runBlocking { getSuggestionProvider(subtype) } as? LatinLanguageProvider ?: return null
+        return provider.typoSuggestionsOrNull(subtype, content)
     }
 
     fun removeSuggestion(subtype: Subtype, candidate: SuggestionCandidate): Boolean {

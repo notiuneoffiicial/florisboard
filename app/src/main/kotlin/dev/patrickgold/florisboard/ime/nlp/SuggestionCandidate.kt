@@ -111,6 +111,11 @@ data class WordSuggestionCandidate(
     override val isEligibleForAutoCommit: Boolean = false,
     override val isEligibleForUserRemoval: Boolean = true,
     override val sourceProvider: SuggestionProvider? = null,
+    /** Tiune fork. The word being typed when this candidate was computed
+     *  ("" for a next-word prediction), so that a stale list — computed
+     *  for the word one letter shorter — is never applied by the space
+     *  bar. Null when the provider does not say. */
+    val forInput: String? = null,
 ) : SuggestionCandidate {
     override val icon: ImageVector? = null
 }

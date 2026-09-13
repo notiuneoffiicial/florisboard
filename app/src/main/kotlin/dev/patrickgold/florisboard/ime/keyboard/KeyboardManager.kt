@@ -282,9 +282,21 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
         }
     }
 
-    fun commitCandidate(candidate: SuggestionCandidate) {
+    /**
+     * @param auto Tiune fork: true when the keyboard applies the candidate
+     *  itself (space bar, punctuation) rather than the user tapping it.
+     *  Only those are corrections the user may want back.
+     */
+    fun commitCandidate(candidate: SuggestionCandidate, auto: Boolean = false) {
         scope.launch {
             candidate.sourceProvider?.notifySuggestionAccepted(subtypeManager.activeSubtype, candidate)
+        }
+        if (auto && candidate !is ClipboardSuggestionCandidate) {
+            val typed = editorInstance.activeContent.composingText.trim()
+            val corrected = candidate.text.toString()
+            if (typed.isNotEmpty() && typed != corrected) {
+                editorInstance.noteAutocorrect(typed, corrected)
+            }
         }
         when (candidate) {
             is ClipboardSuggestionCandidate -> editorInstance.commitClipboardItem(candidate.clipboardItem)
@@ -423,6 +435,9 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             it.isManualSelectionModeStart = false
             it.isManualSelectionModeEnd = false
         }
+        // Tiune fork: the backspace right after the space bar changed a word
+        // puts the word back, like Gboard.
+        if (unit == OperationUnit.CHARACTERS && editorInstance.revertAutocorrect()) return
         revertPreviouslyAcceptedCandidate()
         editorInstance.deleteBackwards(unit)
     }
@@ -536,7 +551,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
      */
     fun handleHardwareKeyboardSpace() {
         val candidate = nlpManager.getAutoCommitCandidate()
-        candidate?.let { commitCandidate(it) }
+        candidate?.let { commitCandidate(it, auto = true) }
         // Skip handling changing to characters keyboard and double space periods
         // TODO: this is whether we commit space after selecting candidate. Should be determined by SuggestionProvider
         if (!subtypeManager.activeSubtype.primaryLocale.supportsAutoSpace &&
@@ -551,7 +566,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
      */
     private fun handleSpace(data: KeyData) {
         val candidate = nlpManager.getAutoCommitCandidate()
-        candidate?.let { commitCandidate(it) }
+        candidate?.let { commitCandidate(it, auto = true) }
         if (prefs.keyboard.spaceBarSwitchesToCharacters.get()) {
             when (activeState.keyboardMode) {
                 KeyboardMode.NUMERIC_ADVANCED,
@@ -777,7 +792,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             KeyCode.VIEW_SYMBOLS2 -> activeState.keyboardMode = KeyboardMode.SYMBOLS2
             else -> {
                 if (activeState.imeUiMode == ImeUiMode.MEDIA) {
-                    nlpManager.getAutoCommitCandidate()?.let { commitCandidate(it) }
+                    nlpManager.getAutoCommitCandidate()?.let { commitCandidate(it, auto = true) }
                     editorInstance.commitText(data.asString(isForDisplay = false))
                     return@batchEdit
                 }
@@ -803,7 +818,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
                         KeyType.CHARACTER, KeyType.NUMERIC ->{
                             val text = data.asString(isForDisplay = false)
                             if (!UCharacter.isUAlphabetic(UCharacter.codePointAt(text, 0))) {
-                                nlpManager.getAutoCommitCandidate()?.let { commitCandidate(it) }
+                                nlpManager.getAutoCommitCandidate()?.let { commitCandidate(it, auto = true) }
                             }
                             editorInstance.commitChar(text)
                         }

@@ -31,7 +31,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.BufferedReader
 
 /**
  * Tiune fork: a real Latin provider. Upstream's is a stub (its `suggest`
@@ -47,12 +46,24 @@ import java.io.BufferedReader
  *   auto-commit candidate, which is what makes the space bar correct a
  *   typo ("teh" → "the"); the keyboard's own machinery applies it and lets
  *   backspace undo it.
+ * - **Contractions.** "dont" is not a typo of "done", it is "don't" with
+ *   the apostrophe left out. A table of those comes before the edit
+ *   distance, and the contractions themselves are in the dictionary at
+ *   the frequency they have in conversation, so "it's" beats "its" when
+ *   a typo could be either.
  * - **Next word.** With nothing typed yet, the words that most often
  *   follow the previous one ("I" → "am", "have", "was" …).
  *
- * The user's own words — what they added to the host app's vocabulary,
- * which reaches here as [FlorisImeService.userWords] — are always valid
- * spellings, never "corrected", and offered as completions first.
+ * Three kinds of word are never corrected:
+ * - The user's own words — what they added to the host app's vocabulary,
+ *   which reaches here as [FlorisImeService.userWords] — are always valid
+ *   spellings and offered as completions first.
+ * - Roman Urdu and Hindi (`assets/ime/dict/roman_urdu.txt`): "mein",
+ *   "tum", "kya", "rahe" are not misspelt English, and when the words
+ *   before the caret are that language the space bar stops correcting
+ *   altogether, so a word the list does not have survives too.
+ * - A word the user put back after a correction ([AutocorrectMemory]).
+ *
  * English only for now; another language's subtype gets no suggestions
  * rather than English ones.
  */
@@ -62,6 +73,11 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         private const val MAX_NEXT = 3
         private const val MAX_COMPLETIONS = 3
         private const val MAX_CORRECTIONS = 3
+
+        /** Above this, a word is English for the purpose of deciding what
+         *  language the sentence is in. "hai" and "mein" are in a web-sized
+         *  English list too, thousands of times rarer than this. */
+        private const val ENGLISH_FLOOR = 20_000
     }
 
     private val appContext by context.appContext()
@@ -69,12 +85,14 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
     override val providerId = ProviderId
 
     /** The dictionary: frequencies, the words in alphabetical order for
-     *  prefix search, and each word's most common followers. */
+     *  prefix search, each word's most common followers, and the Roman
+     *  Urdu/Hindi words. */
     private class Dict(
         val freq: HashMap<String, Int>,
         val alpha: Array<String>,
         val byFirst: Map<Char, List<String>>,
         val next: HashMap<String, List<Pair<String, Int>>>,
+        val roman: HashSet<String>,
     )
 
     @Volatile private var dict: Dict? = null
@@ -102,6 +120,12 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
                 freq[line.substring(0, tab)] = line.substring(tab + 1).toIntOrNull() ?: 0
             }
         }
+        // The word list has almost no apostrophes (the corpora behind it
+        // strip them), so the contractions go in here at conversational
+        // frequencies — see the note on CONTRACTION_FREQ.
+        for ((word, f) in CONTRACTION_FREQ) {
+            if ((freq[word] ?: 0) < f) freq[word] = f
+        }
         val alpha = freq.keys.toTypedArray().also { it.sort() }
         val byFirst = alpha.groupBy { it[0] }
         val next = HashMap<String, List<Pair<String, Int>>>(20_000)
@@ -115,12 +139,27 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
                 }
             }
         }
-        flogDebug { "dictionary loaded: ${freq.size} words, ${next.size} bigram heads" }
-        return Dict(freq, alpha, byFirst, next)
+        val roman = HashSet<String>(4_000)
+        appContext.assets.open("ime/dict/roman_urdu.txt").bufferedReader().useLines { lines ->
+            for (line in lines) {
+                val w = line.trim()
+                if (w.isNotEmpty()) roman.add(w)
+            }
+        }
+        flogDebug { "dictionary loaded: ${freq.size} words, ${next.size} bigram heads, ${roman.size} roman urdu" }
+        return Dict(freq, alpha, byFirst, next, roman)
     }
 
+    private fun userKnown(word: String): Boolean =
+        FlorisImeService.userWords.any { it.equals(word, ignoreCase = true) }
+
+    /** A valid spelling: English, Roman Urdu/Hindi, or the user's own. */
     private fun known(d: Dict, word: String): Boolean =
-        d.freq.containsKey(word) || FlorisImeService.userWords.contains(word)
+        d.freq.containsKey(word) || d.roman.contains(word) || userKnown(word)
+
+    /** Words that are never corrected, whatever the dictionary says. */
+    private fun ownWord(d: Dict, word: String): Boolean =
+        d.roman.contains(word) || userKnown(word) || AutocorrectMemory.isInsisted(word)
 
     /** The dictionary words starting with `prefix`, most common first. */
     private fun completions(d: Dict, prefix: String, limit: Int): List<String> {
@@ -209,6 +248,49 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         return before.subSequence(start, end).toString().lowercase()
     }
 
+    /** The finished words just before the caret, nearest first, at most
+     *  `limit`. `before` must not include the word being typed. */
+    private fun recentWords(before: CharSequence, limit: Int): List<String> {
+        val out = ArrayList<String>(limit)
+        var end = before.length
+        while (out.size < limit) {
+            while (end > 0 && !before[end - 1].isLetter()) end--
+            if (end == 0) break
+            var start = end
+            while (start > 0 && (before[start - 1].isLetter() || before[start - 1] == '\'')) start--
+            out.add(before.subSequence(start, end).toString().lowercase())
+            end = start
+        }
+        return out
+    }
+
+    /**
+     * Whether the sentence the user is in the middle of is Roman Urdu or
+     * Hindi rather than English. The previous word being on the Roman list
+     * decides it; otherwise the last three words vote, and a word English
+     * does not know counts for the other side — the list cannot hold every
+     * spelling of every word, and an unknown word after unknown words is
+     * far more likely that language than three typos in a row.
+     */
+    private fun romanContext(d: Dict, content: EditorContent): Boolean {
+        val before = content.textBeforeSelection.removeSuffix(content.composingText)
+        val recent = recentWords(before, 3)
+        if (recent.isEmpty()) return false
+        var roman = 0
+        var english = 0
+        for ((i, w) in recent.withIndex()) {
+            val isEnglish = (d.freq[w] ?: 0) >= ENGLISH_FLOOR
+            val isRoman = d.roman.contains(w) && !isEnglish
+            if (i == 0 && isRoman) return true
+            when {
+                isRoman -> roman++
+                isEnglish || userKnown(w) -> english++
+                !d.freq.containsKey(w) -> roman++
+            }
+        }
+        return roman > english
+    }
+
     override suspend fun suggest(
         subtype: Subtype,
         content: EditorContent,
@@ -241,9 +323,10 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
             // that language's followers with it — "y" offered "el", "la",
             // "z". "a" and "I" are the two single letters that are words.
             if (prev.length < 2 && prev != "a" && prev != "i") return emptyList()
+            if (d.roman.contains(prev) && (d.freq[prev] ?: 0) < ENGLISH_FLOOR) return emptyList()
             val followers = d.next[prev] ?: return emptyList()
             return followers.filter { (w, _) -> known(d, w) }.take(MAX_NEXT).map { (w, c) ->
-                WordSuggestionCandidate(text = cased(w, ""), confidence = c.toDouble(), isEligibleForAutoCommit = false, sourceProvider = this)
+                WordSuggestionCandidate(text = cased(w, ""), confidence = c.toDouble(), isEligibleForAutoCommit = false, sourceProvider = this, forInput = "")
             }
         }
         if (!typed.all { it.isLetter() || it == '\'' }) return emptyList()
@@ -257,31 +340,53 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         for (w in FlorisImeService.userWords) {
             val wl = w.lowercase()
             if (wl != lower && wl.startsWith(lower) && seen.add(wl)) {
-                out.add(WordSuggestionCandidate(text = w, confidence = 1.0, isEligibleForAutoCommit = false, sourceProvider = this))
+                out.add(WordSuggestionCandidate(text = w, confidence = 1.0, isEligibleForAutoCommit = false, sourceProvider = this, forInput = typed))
                 if (out.size >= 2) break
             }
+        }
+
+        // The user typing a word back that the space bar had changed, in
+        // the middle of what they wrote, is them putting it right.
+        if (content.textAfterSelection.isNotBlank() && AutocorrectMemory.wasApplied(lower)) {
+            AutocorrectMemory.insist(lower)
+        }
+        // Whether the space bar may change this word at all.
+        val autoAllowed = FlorisImeService.autoCorrectEnabled() &&
+            !ownWord(d, lower) && !romanContext(d, content)
+
+        // Contractions. "dont", "im", "cant" are words with the apostrophe
+        // left out, and the nearest dictionary word is not the fix
+        // ("done", "in", "cent"). The ambiguous ones — "its", "well",
+        // "were" — are real words, so they are offered, not applied.
+        val contraction = CONTRACTIONS[lower]
+        if (contraction != null && !userKnown(lower) && !AutocorrectMemory.isInsisted(lower)) {
+            val auto = autoAllowed && !AMBIGUOUS_CONTRACTIONS.contains(lower)
+            seen.add(contraction)
+            out.add(WordSuggestionCandidate(text = cased(contraction, typed), confidence = 0.95, isEligibleForAutoCommit = auto, sourceProvider = this, forInput = typed))
         }
 
         // Corrections. A word the dictionary does not know is a typo until
         // proven otherwise. A word it does know can still be one: "teh" is
         // in any web-sized word list, and what gives it away is that "the"
         // is thousands of times more common one edit away. The user's own
-        // words are never corrected.
+        // words, Roman Urdu and words the user insisted on are never
+        // corrected.
         val typedFreq = d.freq[lower] ?: 0
-        val userKnown = FlorisImeService.userWords.any { it.equals(lower, ignoreCase = true) }
-        if (!userKnown && lower.length >= 2) {
+        if (!ownWord(d, lower) && lower.length >= 2) {
             val fixes = corrections(d, lower, MAX_CORRECTIONS)
                 .filter { (w, _) -> !isKnown || (d.freq[w] ?: 0) >= typedFreq * 200L }
-            fixes.forEachIndexed { i, (w, dist) ->
-                if (!seen.add(w)) return@forEachIndexed
+            var first = true
+            for ((w, dist) in fixes) {
+                if (!seen.add(w)) continue
                 // The best fix is what the space bar will apply — only when it
                 // is clearly what was meant: one edit away (two on a long
                 // word), a word people actually use, and — for a typed word
                 // the dictionary knows — one that outweighs it a thousandfold.
                 val outweighs = !isKnown || (d.freq[w] ?: 0) >= typedFreq * 1000L
-                val auto = i == 0 && FlorisImeService.autoCorrectEnabled() && outweighs &&
+                val auto = first && contraction == null && autoAllowed && outweighs &&
                     (dist == 1 || lower.length >= 6) && (d.freq[w] ?: 0) >= 200
-                out.add(WordSuggestionCandidate(text = cased(w, typed), confidence = 0.9 - 0.1 * i, isEligibleForAutoCommit = auto, sourceProvider = this))
+                out.add(WordSuggestionCandidate(text = cased(w, typed), confidence = if (first) 0.9 else 0.8, isEligibleForAutoCommit = auto, sourceProvider = this, forInput = typed))
+                first = false
             }
         }
         // Completions of a word the dictionary already knows have to be worth
@@ -292,9 +397,36 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         val floor = if (isKnown) typedFreq / 100L else 0L
         for (w in completions(d, lower, MAX_COMPLETIONS)) {
             if ((d.freq[w] ?: 0) < floor) continue
-            if (seen.add(w)) out.add(WordSuggestionCandidate(text = cased(w, typed), confidence = 0.5, isEligibleForAutoCommit = false, sourceProvider = this))
+            if (seen.add(w)) out.add(WordSuggestionCandidate(text = cased(w, typed), confidence = 0.5, isEligibleForAutoCommit = false, sourceProvider = this, forInput = typed))
         }
         return out.take(maxCandidateCount)
+    }
+
+    /**
+     * Whether the word being typed in [content] is a misspelling, decided
+     * now, without suspending: the dictionary is in memory once loaded.
+     * Returns the fixes to offer (possibly none) for a typo, or null for a
+     * word that is fine — known to English, Roman Urdu, the user, or the
+     * one they insisted on; or in a Roman Urdu sentence, where an unknown
+     * word is a word, not a mistake. Null too while the dictionary is
+     * still loading. Used to underline the word when it is finished.
+     */
+    fun typoSuggestionsOrNull(subtype: Subtype, content: EditorContent): Array<String>? {
+        if (subtype.primaryLocale.language != "en") return null
+        val d = dict ?: return null
+        val typed = content.composingText.trim()
+        if (typed.length < 2 || !typed.all { it.isLetter() || it == '\'' }) return null
+        val lower = typed.lowercase()
+        if (known(d, lower) || AutocorrectMemory.isInsisted(lower)) return null
+        if (typed.length > 1 && typed.all { it.isUpperCase() }) return null // an acronym
+        if (romanContext(d, content)) return null
+        val fixes = ArrayList<String>(4)
+        CONTRACTIONS[lower]?.let { fixes.add(cased(it, typed)) }
+        for ((w, _) in corrections(d, lower, MAX_CORRECTIONS)) {
+            val c = cased(w, typed)
+            if (!fixes.contains(c)) fixes.add(c)
+        }
+        return fixes.toTypedArray()
     }
 
     override suspend fun spell(
@@ -310,7 +442,12 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
         val d = ensureLoaded()
         val lower = word.lowercase()
         if (lower.isEmpty() || !lower.all { it.isLetter() || it == '\'' } || known(d, lower)) return SpellingResult.validWord()
-        val fixes = corrections(d, lower, maxSuggestionCount).map { cased(it.first, word) }
+        val fixes = ArrayList<String>()
+        CONTRACTIONS[lower]?.let { fixes.add(cased(it, word)) }
+        for ((w, _) in corrections(d, lower, maxSuggestionCount)) {
+            val c = cased(w, word)
+            if (!fixes.contains(c)) fixes.add(c)
+        }
         return if (fixes.isEmpty()) SpellingResult.validWord() else SpellingResult.typo(fixes.toTypedArray())
     }
 
@@ -345,4 +482,51 @@ private val NEIGHBOURS: Map<Char, String> = mapOf(
     'i' to "uojk", 'o' to "ipkl", 'p' to "ol", 'a' to "qwsz", 's' to "awedxz", 'd' to "serfcx", 'f' to "drtgvc",
     'g' to "ftyhbv", 'h' to "gyujnb", 'j' to "huikmn", 'k' to "jiolm", 'l' to "kop", 'z' to "asx", 'x' to "zsdc",
     'c' to "xdfv", 'v' to "cfgb", 'b' to "vghn", 'n' to "bhjm", 'm' to "njk",
+)
+
+/**
+ * Contractions at the frequency they have in conversation, on the scale of
+ * `words.txt` (where "the" is 28.9 million and "its" 657 thousand). The
+ * word list behind the keyboard was built from corpora that strip
+ * apostrophes, so "don't" arrived at 25 thousand and "it's" not at all —
+ * which made "its" the fix for every typo of "it's". Messages are
+ * conversation; these are the numbers of a subtitle-sized corpus.
+ */
+private val CONTRACTION_FREQ: Map<String, Int> = mapOf(
+    "i'm" to 2_400_000, "it's" to 2_200_000, "don't" to 2_100_000, "that's" to 1_200_000,
+    "you're" to 900_000, "can't" to 850_000, "i'll" to 700_000, "what's" to 650_000,
+    "i've" to 600_000, "didn't" to 600_000, "he's" to 550_000, "let's" to 500_000,
+    "there's" to 500_000, "she's" to 450_000, "we're" to 450_000, "i'd" to 400_000,
+    "they're" to 380_000, "isn't" to 380_000, "doesn't" to 350_000, "won't" to 320_000,
+    "you'll" to 300_000, "we'll" to 300_000, "wasn't" to 300_000, "you've" to 280_000,
+    "here's" to 250_000, "wouldn't" to 220_000, "aren't" to 200_000, "haven't" to 200_000,
+    "couldn't" to 200_000, "we've" to 200_000, "who's" to 200_000, "where's" to 200_000,
+    "you'd" to 150_000, "how's" to 150_000, "ain't" to 150_000, "he'll" to 120_000,
+    "shouldn't" to 120_000, "ma'am" to 120_000, "he'd" to 100_000, "hasn't" to 90_000,
+    "weren't" to 90_000, "we'd" to 90_000, "it'll" to 90_000, "hadn't" to 80_000,
+    "they'll" to 80_000, "they've" to 80_000, "she'll" to 80_000, "o'clock" to 80_000,
+    "y'all" to 60_000, "she'd" to 60_000, "they'd" to 60_000, "that'll" to 50_000,
+    "would've" to 40_000, "could've" to 40_000, "should've" to 40_000, "one's" to 40_000,
+    "that'd" to 30_000, "everyone's" to 30_000, "someone's" to 30_000, "it'd" to 20_000,
+    "who'd" to 20_000, "how'd" to 20_000, "what'd" to 20_000, "when's" to 20_000,
+    "everybody's" to 20_000, "mustn't" to 15_000, "there'll" to 15_000, "where'd" to 15_000,
+    "somebody's" to 15_000, "nobody's" to 15_000, "must've" to 10_000, "what'll" to 10_000,
+    "why's" to 10_000, "might've" to 8_000, "who'll" to 8_000, "needn't" to 5_000,
+    "who've" to 5_000,
+)
+
+/** Typed without the apostrophe → the contraction. */
+private val CONTRACTIONS: Map<String, String> = buildMap {
+    for (c in CONTRACTION_FREQ.keys) put(c.replace("'", ""), c)
+}
+
+/**
+ * The stripped forms that are words in their own right. These get the
+ * contraction as a suggestion, never as the space bar's correction: "its",
+ * "well", "were" are what most people who type them mean. Gboard changes
+ * "ill" to "I'll", and so do we; "id" stays, because people send each other
+ * their ids all day.
+ */
+private val AMBIGUOUS_CONTRACTIONS: Set<String> = setOf(
+    "its", "id", "well", "were", "hell", "shell", "wed", "shed", "lets", "ones",
 )
