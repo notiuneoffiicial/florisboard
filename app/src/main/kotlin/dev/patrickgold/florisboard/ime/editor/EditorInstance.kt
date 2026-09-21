@@ -88,12 +88,54 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var highlightGen = 0
 
+    // ---- Tiune fork: a word the user went back into is theirs ----
+    //
+    // Gboard never auto-corrects a word the cursor was moved into: going
+    // back to fix a word is the user overruling the keyboard, and
+    // "fixing" the fix again is the one thing that must not happen. So:
+    // after any caret move we did not cause, the word under the caret (or
+    // the word typed over a selection) is *resumed* — the space bar leaves
+    // it alone, it gets no red line, and it is remembered as insisted on.
+
+    /** True after the caret moved somewhere the editor did not put it,
+     *  until the next key says what that was for. */
+    private var caretMoved = false
+
+    /** Start of the word being edited after such a move; -1 for a fresh
+     *  word typed somewhere new. */
+    private var resumedStart = -1
+
+    fun isComposingResumed(): Boolean {
+        val c = activeContent
+        if (!c.composing.isValid || c.composingText.isBlank()) return false
+        return caretMoved || (resumedStart >= 0 && c.composing.start == resumedStart)
+    }
+
+    /** The first letter after a caret move decides: into a word, or over a
+     *  selection, and that word is resumed; anywhere else it is fresh. */
+    private fun settleResumed() {
+        if (!caretMoved) return
+        caretMoved = false
+        val c = activeContent
+        resumedStart = when {
+            c.selection.isSelectionMode -> c.selection.start
+            c.composing.isValid && c.composingText.isNotBlank() -> c.composing.start
+            else -> -1
+        }
+    }
+
+    private fun endResumed() {
+        caretMoved = false
+        resumedStart = -1
+    }
+
     private fun currentInputConnection() = FlorisImeService.currentInputConnection()
 
     override fun handleStartInputView(editorInfo: FlorisEditorInfo, isRestart: Boolean) {
         // Tiune fork: a new field is a new conversation with autocorrect.
         if (!isRestart) AutocorrectMemory.startSession()
         dropAutocorrectState(finishHighlight = false)
+        endResumed()
         if (!prefs.correction.rememberCapsLockState.get()) {
             activeState.inputShiftState = InputShiftState.UNSHIFTED
         }
@@ -171,8 +213,16 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         // in the text, the app itself) ends the chance to take the
         // correction back with backspace, and the highlight with it. The
         // highlight's own frames keep the caret where it is.
+        val highlightFrame = highlightOwnsComposing && revertable?.caret == newSelection.start
         revertable?.let { r ->
             if (newSelection.start != r.caret || newSelection.isSelectionMode) dropAutocorrectState(finishHighlight = true)
+        }
+        // A caret that is neither where we last knew it nor where our
+        // pending edit puts it was moved by the user or the app.
+        if (!highlightFrame && newSelection.start != activeContent.selection.start &&
+            newSelection.start != expectedContent()?.selection?.start) {
+            caretMoved = true
+            resumedStart = -1
         }
     }
 
@@ -247,11 +297,19 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         ic?.beginBatchEdit()
         val correctedBefore = justCorrected != null
         if (endsWord) cancelHighlight() else dropAutocorrectState(finishHighlight = true)
+        if (endsWord) finishResumedWord() else settleResumed()
         if (endsWord && !correctedBefore) underlineTypoIfAny()
         val ok = commitCharInner(char)
         if (ok && endsWord) afterSeparator()
         ic?.endBatchEdit()
         return ok
+    }
+
+    /** A resumed word being finished is the user's: remembered, and never
+     *  marked. */
+    private fun finishResumedWord() {
+        if (isComposingResumed()) AutocorrectMemory.insist(activeContent.composingText.trim())
+        endResumed()
     }
 
     private fun commitCharInner(char: String): Boolean {
@@ -291,6 +349,7 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         ic?.beginBatchEdit()
         val correctedBefore = justCorrected != null
         if (endsWord) cancelHighlight() else dropAutocorrectState(finishHighlight = true)
+        if (endsWord) finishResumedWord() else settleResumed()
         if (endsWord && !correctedBefore) underlineTypoIfAny()
         val isPhantomSpaceActive = phantomSpace.determine(text)
         autoSpace.setInactive()
@@ -413,6 +472,8 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
      * because then the word here is a keystroke behind the field.
      */
     private fun underlineTypoIfAny() {
+        // A keyboard told not to fix typos should not nag about them either.
+        if (!FlorisImeService.autoCorrectEnabled()) return
         val content = activeContent
         if (activeInfo.isRawInputEditor || !content.composing.isValid || content.composingText.isBlank()) return
         if (activeState.keyVariation != KeyVariation.NORMAL || hasPendingEdit()) return
@@ -441,6 +502,7 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         if (text.isEmpty() || activeInfo.isRawInputEditor) return false
         revertable = null
         cancelHighlight()
+        endResumed()
         val content = activeContent
         return if (content.composing.isValid) {
             phantomSpace.setActive(showComposingRegion = false, candidate = candidate)

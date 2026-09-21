@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import dev.patrickgold.florisboard.R
+import dev.patrickgold.florisboard.FlorisImeService
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.ime.keyboard.FlorisImeSizing
 import dev.patrickgold.florisboard.ime.nlp.NlpInlineAutofill
@@ -209,7 +210,11 @@ private fun SmartbarMainRow(modifier: Modifier = Modifier) {
 
     @Composable
     fun RowScope.CenterContent() {
-        val expanded = sharedActionsExpanded && smartbarLayout == SmartbarLayout.SUGGESTIONS_ACTIONS_SHARED
+        // Tiune fork: while the mic key listens with the keys up the strip
+        // says so, and the action icons that fill an empty strip wait.
+        val voicePrompt by FlorisImeService.voicePrompt.collectAsState()
+        val expanded = sharedActionsExpanded && smartbarLayout == SmartbarLayout.SUGGESTIONS_ACTIONS_SHARED &&
+            voicePrompt == null
         Box(
             modifier = Modifier
                 .weight(1f)

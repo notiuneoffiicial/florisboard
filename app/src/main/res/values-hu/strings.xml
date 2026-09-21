@@ -564,7 +564,7 @@
     <string name="setup__select_ime__switch_keyboard_btn">Billentyűzet váltása</string>
     <string name="setup__grant_notification_permission__title">Összeomlási jelentések értesítéseinek engedélyezése</string>
     <string name="setup__grant_notification_permission__description">Az Android 13+ rendszertől kezdve az alkalmazásoknak engedélyt kell kérniük az
-        értesítések küldéséhez. A Florisboardban ez csak arra szolgál, hogy
+        értesítések küldéséhez. A Tiuneban ez csak arra szolgál, hogy
         összeomlás esetén megnyíjon az összeomlási jelentés képernyője. Ez az
         engedély bármikor megváltoztatható a rendszerbeállításokban.
     </string>

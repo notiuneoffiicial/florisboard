@@ -563,7 +563,7 @@
     <string name="setup__select_ime__description">Клавиатурата на {app_name} вече е включена от системата. За да я използвате активно, превключете на {app_name}, като я изберете в диалоговия прозорец с методи за въвеждане!</string>
     <string name="setup__select_ime__switch_keyboard_btn">Смяна на клавиатура</string>
     <string name="setup__grant_notification_permission__title">Разрешаване на известия при срив</string>
-    <string name="setup__grant_notification_permission__description">От Андроид 13 нататък, приложенията трябва да поискат разрешение да изпращат известия. Във Florisboard те се използват само за отваряне на екран в случай на срив.
+    <string name="setup__grant_notification_permission__description">От Андроид 13 нататък, приложенията трябва да поискат разрешение да изпращат известия. Във Tiune те се използват само за отваряне на екран в случай на срив.
 Можете да промените разрешението по всяко време в системните настройки.</string>
     <string name="setup__grant_notification_permission__btn">Даване на разрешение</string>
     <string name="setup__finish_up__title">Завършване</string>

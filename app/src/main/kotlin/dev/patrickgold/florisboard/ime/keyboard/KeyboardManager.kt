@@ -435,6 +435,11 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
             it.isManualSelectionModeStart = false
             it.isManualSelectionModeEnd = false
         }
+        // Tiune fork: while the host's dictation is running, backspace is
+        // "stop, and forget what you heard" — not a fight with the live
+        // words, which the next batch would only paste back.
+        if (FlorisImeService.voiceInputState.value != FlorisImeService.VOICE_QUIET &&
+            FlorisImeService.consumeVoiceBackspace()) return
         // Tiune fork: the backspace right after the space bar changed a word
         // puts the word back, like Gboard.
         if (unit == OperationUnit.CHARACTERS && editorInstance.revertAutocorrect()) return

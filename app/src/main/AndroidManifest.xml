@@ -13,38 +13,17 @@
     <!-- Permission needed to vibrate if the user has key press vibration enabled -->
     <uses-permission android:name="android.permission.VIBRATE"/>
 
-    <!-- Permission needed to create notifications on devices running Android 13+ -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-
-    <!-- Android 11+ only: Define that FlorisBoard requests to see all apps that
-          ship with an IME or Spell Check service. This is used to guide the user
-          in the Settings Ui why FlorisBoard may not be working.
-     -->
-    <queries>
-        <intent>
-            <action android:name="android.view.InputMethod"/>
-        </intent>
-        <intent>
-            <action android:name="android.service.textservice.SpellCheckerService"/>
-        </intent>
-    </queries>
-
     <application
         android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true"
         tools:targetApi="tiramisu">
 
-        <!-- Spellchecker service -->
-        <service
-            android:name="dev.patrickgold.florisboard.FlorisSpellCheckerService"
-            android:label="@string/floris_app_name"
-            android:permission="android.permission.BIND_TEXT_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.service.textservice.SpellCheckerService"/>
-            </intent-filter>
-            <meta-data android:name="android.view.textservice.scs" android:resource="@xml/spellchecker"/>
-        </service>
+        <!-- Tiune fork: FlorisBoard's system spell-checker service is NOT
+             registered. The keyboard marks a misspelling itself, by committing
+             the word with a SuggestionSpan (EditorInstance.underlineTypoIfAny),
+             so the service added nothing — and its settings activity,
+             `SettingsLauncherAlias`, does not exist in this app, so the gear
+             beside "Tiune" in Android's spell-checker settings failed. -->
 
         <!-- Keyboard settings (layouts, themes, typing, clipboard, ...) -->
         <activity
@@ -58,25 +37,18 @@
             android:exported="false">
         </activity>
 
-        <!-- Crash Dialog Activity -->
-        <activity
-            android:name="dev.patrickgold.florisboard.lib.crashutility.CrashDialogActivity"
-            android:icon="@mipmap/floris_app_icon"
-            android:label="@string/crash_dialog__title"
-            android:configChanges="orientation|screenSize"
-            android:theme="@style/CrashDialogTheme"/>
+        <!-- Tiune fork: FlorisBoard's crash dialog is NOT registered, and its
+             handler is not installed (see FlorisApplication.installCrashHandler).
+             It showed a stack trace headed "FlorisBoard", a link to
+             FlorisBoard's releases, and a button opening FlorisBoard's GitHub
+             issue tracker — to a Tiune customer, for a crash anywhere in the
+             process. -->
 
-        <!-- Copy to Clipboard Activity -->
-        <activity
-            android:name="dev.patrickgold.florisboard.ime.clipboard.FlorisCopyToClipboardActivity"
-            android:theme="@style/FlorisAppTheme.Transparent"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="image/*"/>
-            </intent-filter>
-        </activity>
+        <!-- Tiune fork: FlorisBoard's "share an image into the keyboard's
+             clipboard" activity is NOT registered. Exported with an image/*
+             SEND filter, it put Tiune in the Android share sheet for every
+             photo — an entry point Tiune never documents and nobody expects
+             from a dictation keyboard. -->
 
         <!-- Clipboard Media File Provider -->
         <provider

@@ -456,7 +456,7 @@
     <string name="setup__select_ime__switch_keyboard_btn">Mudar Teclado</string>
     <string name="setup__grant_notification_permission__title">Permitir notificação com relatório de crash</string>
     <string name="setup__grant_notification_permission__description">A partir do Android 13, aplicativos precisam pedir permissão para
-        enviar notificações. No Florisboard, isso só é usado para abrir a tela de relatório de crash caso ocorra um crash.
+        enviar notificações. No Tiune, isso só é usado para abrir a tela de relatório de crash caso ocorra um crash.
         Essa permissão pode ser alterada a qualquer momento nas configurações do sistema.
     </string>
     <string name="setup__grant_notification_permission__btn">Conceder permissão</string>

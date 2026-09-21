@@ -517,7 +517,7 @@
     <string name="setup__select_ime__switch_keyboard_btn">Pārslēgt tastatūru</string>
     <string name="setup__grant_notification_permission__title">Atļaut avārijas atskaišu paziņojumus</string>
     <string name="setup__grant_notification_permission__description">Sākot ar Android 13, lietotnēm ir jāprasa atļauja, lai
-        nosūtītu paziņojumus. Florisboard tā tiek izmantota tikai, lai atvērtu avārijas ziņojuma ekrānu avārijas gadījumā.
+        nosūtītu paziņojumus. Tiune tā tiek izmantota tikai, lai atvērtu avārijas ziņojuma ekrānu avārijas gadījumā.
         Šo atļauju sistēmas iestatījumos var mainīt jebkurā laikā.
     </string>
     <string name="setup__grant_notification_permission__btn">Piešķirt atļauju</string>

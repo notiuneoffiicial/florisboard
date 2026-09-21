@@ -563,7 +563,7 @@
     <string name="setup__select_ime__switch_keyboard_btn">切换键盘</string>
     <string name="setup__grant_notification_permission__title">允许崩溃报告消息通知</string>
     <string name="setup__grant_notification_permission__description">自安卓 13 以来，应用在发送通知前
-    必须向用户申请权限。在 Florisboard 中，这一权限仅用于在崩溃时打开一个崩溃报告页面。
+    必须向用户申请权限。在 Tiune 中，这一权限仅用于在崩溃时打开一个崩溃报告页面。
     这一权限可以随时在系统设置中更改。
     </string>
     <string name="setup__grant_notification_permission__btn">授予权限</string>

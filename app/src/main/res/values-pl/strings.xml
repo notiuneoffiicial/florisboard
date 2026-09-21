@@ -566,7 +566,7 @@
     <string name="setup__select_ime__switch_keyboard_btn">Przełącz Klawiaturę</string>
     <string name="setup__grant_notification_permission__title">Zezwolenie na powiadomienia dotyczące raportów o awariach</string>
     <string name="setup__grant_notification_permission__description">Od Androida 13+ aplikacje muszą prosić o pozwolenie na
-        wysyłanie powiadomień. We Florisboard jest to używane tylko do otwierania ekranu raportu o awarii, w przypadku awarii.
+        wysyłanie powiadomień. We Tiune jest to używane tylko do otwierania ekranu raportu o awarii, w przypadku awarii.
         Zezwolenie to można zmienić w dowolnym momencie w ustawieniach systemu.
     </string>
     <string name="setup__grant_notification_permission__btn">Przyznaj uprawnienie</string>

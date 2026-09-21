@@ -555,7 +555,7 @@
     <string name="setup__select_ime__switch_keyboard_btn">Cambiar teclado</string>
     <string name="setup__grant_notification_permission__title">Permitir notificaciones de informes de errores</string>
     <string name="setup__grant_notification_permission__description">A partir de Android 13+, las aplicaciones deben pedir permiso para
-        enviar notificaciones. En Florisboard, esto solo se utiliza para abrir una pantalla de informe de error en caso de error.
+        enviar notificaciones. En Tiune, esto solo se utiliza para abrir una pantalla de informe de error en caso de error.
         Este permiso puede cambiarse en cualquier momento en los ajustes del sistema.
     </string>
     <string name="setup__grant_notification_permission__btn">Conceder permiso</string>

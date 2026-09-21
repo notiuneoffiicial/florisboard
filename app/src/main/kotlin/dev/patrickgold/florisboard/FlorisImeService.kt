@@ -195,6 +195,12 @@ open class FlorisImeService : LifecycleInputMethodService() {
          *  read by [dev.patrickgold.florisboard.ime.smartbar.quickaction.QuickActionButton]. */
         val voiceInputState = MutableStateFlow(VOICE_QUIET)
         const val VOICE_QUIET = 0
+
+        /** Tiune fork. A line for the suggestion strip to show in place of
+         *  candidates — "Speak now" while the mic key listens with the keys
+         *  up — or null for the candidates. Written by the embedding
+         *  service, read by the candidates row. */
+        val voicePrompt = MutableStateFlow<String?>(null)
         const val VOICE_LISTENING = 1
         const val VOICE_BUSY = 2
 
@@ -216,6 +222,13 @@ open class FlorisImeService : LifecycleInputMethodService() {
          *  editor does not touch the region while this is set. */
         @Volatile
         var hostOwnsComposing: Boolean = false
+
+        /** Tiune fork. Backspace while the host's dictation is running
+         *  ([voiceInputState] not quiet): the host may take it as "cancel".
+         *  True when it did, and the key does nothing else. */
+        fun consumeVoiceBackspace(): Boolean {
+            return FlorisImeServiceReference.get()?.onVoiceBackspace() ?: false
+        }
 
         /** Tiune fork. Whether the space bar may apply the best correction. */
         fun autoCorrectEnabled(): Boolean {
@@ -268,6 +281,10 @@ open class FlorisImeService : LifecycleInputMethodService() {
     /** Tiune fork. Whether the space bar applies the best correction to a
      *  misspelt word. The embedding app keeps the setting. */
     open fun autoCorrectEnabled(): Boolean = true
+
+    /** Tiune fork. The backspace key was pressed while [voiceInputState]
+     *  says a dictation is running. Return true to have consumed it. */
+    open fun onVoiceBackspace(): Boolean = false
 
     /** Tiune fork. Whether an `onStartInputView` should leave [ImeUiMode.VOICE]
      *  up. Upstream behaviour is "only on a restart of the same field"; an

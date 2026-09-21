@@ -449,7 +449,7 @@
     <string name="setup__select_ime__switch_keyboard_btn">Перемкнути клавіатуру</string>
     <string name="setup__grant_notification_permission__title">Повідомлення про збої в роботі з дозволами</string>
     <string name="setup__grant_notification_permission__description">Починаючи з Android 13+, програми повинні запитувати дозвіл на
-        надсилання сповіщень. У Florisboard цей дозвіл використовується лише для того, щоб відкрити екран звіту про збій у разі збою.
+        надсилання сповіщень. У Tiune цей дозвіл використовується лише для того, щоб відкрити екран звіту про збій у разі збою.
         Цей дозвіл можна будь-коли змінити в налаштуваннях системи.
     </string>
     <string name="setup__grant_notification_permission__btn">Надати дозвіл</string>

@@ -39,6 +39,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import dev.patrickgold.florisboard.FlorisImeService
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.ime.nlp.ClipboardSuggestionCandidate
 import dev.patrickgold.florisboard.ime.nlp.SuggestionCandidate
@@ -69,6 +70,24 @@ fun CandidatesRow(modifier: Modifier = Modifier) {
 
     val displayMode by prefs.suggestion.displayMode.collectAsState()
     val candidates by nlpManager.activeCandidatesFlow.collectAsState()
+    // Tiune fork: while the mic key listens with the keys up, the strip
+    // says so ("Speak now") instead of guessing words nobody is typing.
+    val voicePrompt by FlorisImeService.voicePrompt.collectAsState()
+    if (voicePrompt != null) {
+        SnyggRow(
+            elementName = FlorisImeUi.SmartbarCandidatesRow.elementName,
+            modifier = modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SnyggText(
+                elementName = "${FlorisImeUi.SmartbarCandidateWord.elementName}-text",
+                attributes = mapOf("auto-commit" to 0),
+                text = voicePrompt!!,
+            )
+        }
+        return
+    }
 
     SnyggRow(
         elementName = FlorisImeUi.SmartbarCandidatesRow.elementName,

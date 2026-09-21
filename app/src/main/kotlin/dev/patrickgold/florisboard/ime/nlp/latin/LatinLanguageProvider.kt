@@ -345,11 +345,11 @@ class LatinLanguageProvider(context: Context) : SpellingProvider, SuggestionProv
             }
         }
 
-        // The user typing a word back that the space bar had changed, in
-        // the middle of what they wrote, is them putting it right.
-        if (content.textAfterSelection.isNotBlank() && AutocorrectMemory.wasApplied(lower)) {
-            AutocorrectMemory.insist(lower)
-        }
+        // A word the space bar changed once, typed again as it was, is the
+        // user putting it right — whether they went back into the text,
+        // took the correction back and retyped, or simply typed it again.
+        // The price: a typo made twice in one message is fixed once.
+        if (AutocorrectMemory.wasApplied(lower)) AutocorrectMemory.insist(lower)
         // Whether the space bar may change this word at all.
         val autoAllowed = FlorisImeService.autoCorrectEnabled() &&
             !ownWord(d, lower) && !romanContext(d, content)

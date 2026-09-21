@@ -84,7 +84,7 @@ open class FlorisApplication : Application() {
                 flogLevels = Flog.LEVEL_ALL,
                 flogOutputs = Flog.OUTPUT_CONSOLE,
             )
-            CrashUtility.install(this)
+            if (installCrashHandler()) CrashUtility.install(this)
             FlorisEmojiCompat.init(this)
 
             if (!UserManagerCompat.isUserUnlocked(this)) {
@@ -96,10 +96,24 @@ open class FlorisApplication : Application() {
 
             init()
         } catch (e: Exception) {
-            CrashUtility.stageException(e)
+            if (installCrashHandler()) CrashUtility.stageException(e)
             return
         }
     }
+
+    /**
+     * Tiune fork. Whether to install FlorisBoard's crash handler and its
+     * report dialog.
+     *
+     * An embedding app answers false when it handles its own crashes. It has
+     * to: the handler is process-wide, so in an app that is a keyboard *and*
+     * an activity it catches everything, and the dialog it shows is
+     * FlorisBoard's — a stack trace headed "FlorisBoard", a link to
+     * FlorisBoard's releases, and a button opening FlorisBoard's issue
+     * tracker. Answering false also means the dialog activity and the
+     * notification permission need not be declared at all.
+     */
+    protected open fun installCrashHandler(): Boolean = true
 
     fun init() {
         cacheDir?.deleteContentsRecursively()

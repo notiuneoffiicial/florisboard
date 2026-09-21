@@ -254,6 +254,9 @@ class NlpManager(context: Context) {
         // would apply "men" to a word it was never computed for. When the
         // list is not for the word under the caret, compute it now; the
         // provider is a dictionary lookup once loaded.
+        // A word the user went back into is never corrected (see
+        // EditorInstance.isComposingResumed).
+        if (editorInstance.isComposingResumed()) return null
         val content = editorInstance.activeContent
         val typed = content.composingText.trim()
         val candidates = activeCandidates
