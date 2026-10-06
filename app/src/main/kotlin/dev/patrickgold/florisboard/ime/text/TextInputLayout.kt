@@ -23,10 +23,13 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.viewinterop.AndroidView
+import dev.patrickgold.florisboard.FlorisImeService
 import dev.patrickgold.florisboard.R
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.ime.smartbar.IncognitoDisplayMode
@@ -76,6 +79,15 @@ fun TextInputLayout(
                     )
                 }
                 TextKeyboardLayout(evaluator = evaluator)
+                // Tiune fork: the embedding app's first-run guide, over the
+                // keys only (see FlorisImeService.keyboardGuideVisible).
+                val guideVisible by FlorisImeService.keyboardGuideVisible.collectAsState()
+                if (guideVisible) {
+                    val guide = remember { FlorisImeService.keyboardGuideViewOrNull(context) }
+                    if (guide != null) {
+                        AndroidView(factory = { guide }, modifier = Modifier.matchParentSize())
+                    }
+                }
             }
         }
     }

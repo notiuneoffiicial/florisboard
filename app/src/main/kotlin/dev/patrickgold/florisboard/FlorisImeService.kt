@@ -235,6 +235,17 @@ open class FlorisImeService : LifecycleInputMethodService() {
             return FlorisImeServiceReference.get()?.autoCorrectEnabled() ?: true
         }
 
+        /** Tiune fork. While true, the embedding app's keyboard guide
+         *  ([keyboardGuideViewOrNull]) is drawn over the keys — not over the
+         *  action bar, so the mic key it points at stays in view and takes
+         *  taps. Written by the embedding service, read by the text layout. */
+        val keyboardGuideVisible = MutableStateFlow(false)
+
+        /** Tiune fork. A NEW guide View each call, or null for none. */
+        fun keyboardGuideViewOrNull(context: Context): View? {
+            return FlorisImeServiceReference.get()?.createKeyboardGuideView(context)
+        }
+
         /** A View the embedding app draws for the whole mic key — its own
          *  microphone, mark and light — or null for the drawables above. A
          *  NEW view each call. */
@@ -291,6 +302,11 @@ open class FlorisImeService : LifecycleInputMethodService() {
      *  embedding app may know of other starts that are not the user moving
      *  to a new field. */
     open fun keepVoiceInputOnStart(restarting: Boolean): Boolean = restarting
+
+    /** Tiune fork. Build the guide drawn over the keys while
+     *  [keyboardGuideVisible] is true. Return a NEW view each time (it is
+     *  created whenever the guide comes into view); null shows nothing. */
+    open fun createKeyboardGuideView(context: Context): View? = null
 
     /** Tiune fork. Build the panel shown for [ImeUiMode.VOICE]. Called each
      *  time the mode is entered; return a NEW view every time (the previous
