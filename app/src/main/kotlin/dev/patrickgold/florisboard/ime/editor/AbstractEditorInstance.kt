@@ -56,6 +56,10 @@ abstract class AbstractEditorInstance(context: Context) {
         private const val NumCharsBeforeCursor: Int = 256
         private const val NumCharsAfterCursor: Int = 128
         private const val NumCharsSafeMarginBeforeCursor: Int = 128
+        /** Tiune fork: see [isSelectionByApp]. Chrome answers a keystroke
+         *  with its guess within a frame or two; a person selecting text
+         *  this soon after typing is not a thing. */
+        private const val APP_SELECTION_AFTER_EDIT_MS: Long = 600
         //private const val NumCharsSafeMarginAfterCursor: Int = 0
 
         private const val CursorUpdateAll: Int =
@@ -80,6 +84,30 @@ abstract class AbstractEditorInstance(context: Context) {
      *  autocorrect highlight. */
     protected fun composingOwnedElsewhere(): Boolean =
         FlorisImeService.hostOwnsComposing || highlightOwnsComposing
+
+    /** Tiune fork. When the keyboard last changed the field itself (a key,
+     *  a candidate, a caret move), and whether it has at all since the field
+     *  came up. The Smartbar reads both (NlpManager.autoExpandCollapseSmartbarActions). */
+    @Volatile
+    private var lastOwnEditAt = 0L
+    @Volatile
+    var hasEditedSinceStart: Boolean = false
+        private set
+
+    /** Tiune fork. The selection on screen is the app's, not the user's: it
+     *  appeared right after a keystroke of ours. Chrome's address bar does
+     *  this on every letter — it selects the rest of the URL it guesses — and
+     *  treating that as the user selecting text flipped the Smartbar to its
+     *  cut/copy/paste icons and back on every key. */
+    @Volatile
+    var isSelectionByApp: Boolean = false
+        private set
+
+    private suspend fun pushExpected(content: EditorContent) {
+        lastOwnEditAt = SystemClock.uptimeMillis()
+        hasEditedSinceStart = true
+        expectedContentQueue.push(content)
+    }
 
     private val _activeInfoFlow = MutableStateFlow(FlorisEditorInfo.Unspecified)
     val activeInfoFlow = _activeInfoFlow.asStateFlow()
@@ -125,7 +153,10 @@ abstract class AbstractEditorInstance(context: Context) {
     open fun handleStartInputView(editorInfo: FlorisEditorInfo, isRestart: Boolean) {
         if (isRestart) {
             reset() // Just to make sure our state is correct after a restart
+        } else {
+            hasEditedSinceStart = false
         }
+        isSelectionByApp = false
         val ic = currentInputConnection()
         activeInfo = editorInfo
         var selection = editorInfo.initialSelection
@@ -173,6 +204,7 @@ abstract class AbstractEditorInstance(context: Context) {
     }
 
     protected fun handleMassSelectionUpdate(newSelection: EditorRange, composing: EditorRange) {
+        isSelectionByApp = false
         activeCursorCapsMode = InputAttributes.CapsMode.NONE
         activeContent = EditorContent.selectionOnly(newSelection)
         if (composing.isValid && !composingOwnedElsewhere()) {
@@ -184,6 +216,15 @@ abstract class AbstractEditorInstance(context: Context) {
     open fun handleSelectionUpdate(oldSelection: EditorRange, newSelection: EditorRange, composing: EditorRange) {
         val ic = currentInputConnection()
         val editorInfo = activeInfo
+        // Decided before the content below changes, because the Smartbar
+        // reacts to that change. A selection that is the echo of an edit of
+        // ours (the select-all action, a caret move) is the user's; one that
+        // was not asked for and turned up right after a keystroke is the
+        // app completing what was typed.
+        val expectedNow = runBlocking { expectedContentQueue.peekNewestOrNull() }
+        isSelectionByApp = newSelection.isSelectionMode &&
+            expectedNow?.selection != newSelection &&
+            SystemClock.uptimeMillis() - lastOwnEditAt < APP_SELECTION_AFTER_EDIT_MS
         if (ic == null || newSelection.isNotValid || editorInfo.isRawInputEditor) {
             activeCursorCapsMode = InputAttributes.CapsMode.NONE
             activeContent = EditorContent.Unspecified
@@ -349,7 +390,7 @@ abstract class AbstractEditorInstance(context: Context) {
             val newContent = content
                 .copy(localSelection = selection.translatedBy(-content.offset))
                 .generateCopy(selection = selection)
-            expectedContentQueue.push(newContent)
+            pushExpected(newContent)
             ic.setSelection(selection.start, selection.end)
             ic.setComposingRegion(newContent.composing)
         }
@@ -403,7 +444,7 @@ abstract class AbstractEditorInstance(context: Context) {
                 },
                 selectedText = "",
             )
-            expectedContentQueue.push(newContent)
+            pushExpected(newContent)
             // Utilize composing region to replace previous chars without using delete. This avoids flickering in the
             // target editor and improves the UX
             ic.setComposingRegion(content.selection.start - rm, content.selection.start)
@@ -435,7 +476,7 @@ abstract class AbstractEditorInstance(context: Context) {
                 },
                 selectedText = "",
             )
-            expectedContentQueue.push(newContent)
+            pushExpected(newContent)
             ic.commitText(text, 1)
             ic.setComposingRegion(newContent.composing)
         }
@@ -460,7 +501,7 @@ abstract class AbstractEditorInstance(context: Context) {
                 },
                 selectedText = "",
             )
-            expectedContentQueue.push(newContent)
+            pushExpected(newContent)
             ic.setComposingText(text, 1)
             ic.finishComposingText()
             _lastCommitPosition.handleCommit(newContent.selection)
@@ -491,7 +532,7 @@ abstract class AbstractEditorInstance(context: Context) {
                 },
                 selectedText = "",
             )
-            expectedContentQueue.push(newContent)
+            pushExpected(newContent)
             ic.finishComposingText()
             ic.deleteSurroundingText(oldLength, 0)
             ic.commitText(newText, 1)
@@ -548,7 +589,7 @@ abstract class AbstractEditorInstance(context: Context) {
                         selection = newSelection,
                         textBeforeSelection = scopeText.dropLast(length),
                     )
-                    expectedContentQueue.push(newContent)
+                    pushExpected(newContent)
                     ic.beginBatchEdit()
                     ic.finishComposingText()
                     ic.deleteSurroundingText(length, 0)
@@ -566,7 +607,7 @@ abstract class AbstractEditorInstance(context: Context) {
                         selection = newSelection,
                         textAfterSelection = scopeText.drop(length),
                     )
-                    expectedContentQueue.push(newContent)
+                    pushExpected(newContent)
                     ic.beginBatchEdit()
                     ic.finishComposingText()
                     ic.deleteSurroundingText(0, length)
@@ -590,7 +631,7 @@ abstract class AbstractEditorInstance(context: Context) {
         runBlocking {
             val newContent = content.generateCopy()
             if (newContent.composing != content.composing) {
-                expectedContentQueue.push(newContent)
+                pushExpected(newContent)
                 ic.setComposingRegion(newContent.composing)
             }
         }

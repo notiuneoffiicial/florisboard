@@ -688,7 +688,11 @@ open class FlorisImeService : LifecycleInputMethodService() {
     override fun onComputeInsets(outInsets: Insets?) {
         if (outInsets == null) return
         val state = keyboardManager.activeState.snapshot()
-        windowController.onComputeInsets(outInsets, state.isFullscreenInputRequired())
+        // Tiune fork: until the window has been laid out, the framework's
+        // own answer (the input view's frame) rather than none.
+        if (!windowController.onComputeInsets(outInsets, state.isFullscreenInputRequired())) {
+            super.onComputeInsets(outInsets)
+        }
     }
 
     override fun getTextForImeAction(imeOptions: Int): String? {

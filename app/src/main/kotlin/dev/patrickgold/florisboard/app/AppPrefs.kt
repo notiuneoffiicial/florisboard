@@ -277,7 +277,7 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         )
         val suggestionQueryMinLength = int(
             key = "emoji__suggestion_query_min_length",
-            default = 3,
+            default = 2,
         )
         val suggestionCandidateMaxCount = int(
             key = "emoji__suggestion_candidate_max_count",

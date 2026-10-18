@@ -204,9 +204,13 @@ class ImeWindowController(
     fun onComputeInsets(
         outInsets: InputMethodService.Insets,
         isFullscreenInputRequired: Boolean,
-    ) {
+    ): Boolean {
         val rootInsets = activeRootInsets.value
-        val windowInsets = activeWindowInsets.value ?: return
+        // Tiune fork: answers whether it filled `outInsets`. Unknown window
+        // insets used to leave them as whatever the framework's reused
+        // object last held — zeros on a keyboard's first frame, which tells
+        // the app the keyboard covers its whole window.
+        val windowInsets = activeWindowInsets.value ?: return false
         val rootBounds = rootInsets.boundsPx
         val windowBounds = windowInsets.boundsPx
         val windowSpec = activeWindowSpec.value
@@ -241,6 +245,7 @@ class ImeWindowController(
             }
         }
         outInsets.touchableInsets = InputMethodService.Insets.TOUCHABLE_INSETS_REGION
+        return true
     }
 
     fun onConfigurationChanged(@Suppress("UNUSED_PARAMETER") newConfig: Configuration) {

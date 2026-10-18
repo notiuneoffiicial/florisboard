@@ -141,6 +141,11 @@ class EditorInstance(context: Context) : AbstractEditorInstance(context) {
         }
         activeState.isActionsOverflowVisible = false
         activeState.isActionsEditorVisible = false
+        // Tiune fork: every sheet, not two of them. A sheet makes the whole
+        // screen the keyboard's for touch (isFullscreenInputRequired), and
+        // one left open by a dismissed keyboard took every tap above the keys
+        // in the next field — Chrome's selection handles and menu included.
+        activeState.isSubtypeSelectionVisible = false
         super.handleStartInputView(editorInfo, isRestart)
         val keyboardMode = when (editorInfo.inputAttributes.type) {
             InputAttributes.Type.NUMBER -> {

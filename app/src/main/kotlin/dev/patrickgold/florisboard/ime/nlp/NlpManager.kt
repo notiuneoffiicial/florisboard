@@ -346,8 +346,28 @@ class NlpManager(context: Context) {
             return // We do not auto switch if a repeatable action key was last pressed or if the actions overflow
                    // menu is visible to prevent annoying UI changes
         }*/
-        val isSelection = editorInstance.activeContent.selection.isSelectionMode
-        val isExpanded = list1.isNullOrEmpty() && list2.isNullOrEmpty() || isSelection
+        // Tiune fork. Upstream flipped to the action icons whenever the
+        // candidate list was empty for a moment, and back when it filled —
+        // on every key in Chrome, where the list empties between words and
+        // the address bar selects its guess after each letter (2026-10). The
+        // icons are for a field the user is not typing in: an empty one, a
+        // fresh one, or a selection they made. While they type, the strip
+        // stays the strip, empty or not.
+        val content = editorInstance.activeContent
+        val candidates = list1 ?: activeCandidates
+        val hasSuggestions = candidates.isNotEmpty() || !list2.isNullOrEmpty()
+        val userSelection = content.selection.isSelectionMode && !editorInstance.isSelectionByApp
+        val isExpanded = when {
+            userSelection -> true
+            hasSuggestions -> false
+            // Between two states of the field (an app that answered out of
+            // step, or no field at all): keep whatever is showing.
+            content.selection.isNotValid -> return
+            content.offset == 0 && content.text.isEmpty() -> true
+            !editorInstance.hasEditedSinceStart -> true
+            else -> return
+        }
+        if (prefs.smartbar.sharedActionsExpanded.get() == isExpanded) return
         scope.launch {
             prefs.smartbar.sharedActionsExpandWithAnimation.set(false)
             prefs.smartbar.sharedActionsExpanded.set(isExpanded)
