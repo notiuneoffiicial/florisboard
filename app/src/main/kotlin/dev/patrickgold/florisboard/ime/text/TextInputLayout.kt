@@ -32,6 +32,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import dev.patrickgold.florisboard.FlorisImeService
 import dev.patrickgold.florisboard.R
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
+import dev.patrickgold.florisboard.ime.media.emoji.EmojiSearch
+import dev.patrickgold.florisboard.ime.media.emoji.EmojiSearchBar
 import dev.patrickgold.florisboard.ime.smartbar.IncognitoDisplayMode
 import dev.patrickgold.florisboard.ime.smartbar.InlineSuggestionsStyleCache
 import dev.patrickgold.florisboard.ime.smartbar.Smartbar
@@ -61,8 +63,15 @@ fun TextInputLayout(
             .fillMaxWidth()
             .wrapContentHeight(),
     ) {
-        Smartbar()
-        if (state.isActionsOverflowVisible) {
+        // Tiune fork: the emoji search, while it is open, in the Smartbar's
+        // place (see EmojiSearch).
+        val emojiSearch by EmojiSearch.isActiveFlow.collectAsState()
+        if (emojiSearch) {
+            EmojiSearchBar()
+        } else {
+            Smartbar()
+        }
+        if (state.isActionsOverflowVisible && !emojiSearch) {
             QuickActionsOverflowPanel()
         } else {
             Box {

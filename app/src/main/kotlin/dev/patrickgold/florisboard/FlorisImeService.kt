@@ -49,6 +49,7 @@ import dev.patrickgold.florisboard.ime.editor.EditorRange
 import dev.patrickgold.florisboard.ime.editor.FlorisEditorInfo
 import dev.patrickgold.florisboard.ime.input.InputFeedbackController
 import dev.patrickgold.florisboard.ime.keyboard.isFullscreenInputRequired
+import dev.patrickgold.florisboard.ime.media.emoji.EmojiSearch
 import dev.patrickgold.florisboard.ime.landscapeinput.ExtractedInputRootView
 import dev.patrickgold.florisboard.ime.landscapeinput.LandscapeInputUiMode
 import dev.patrickgold.florisboard.ime.lifecycle.LifecycleInputMethodService
@@ -547,6 +548,9 @@ open class FlorisImeService : LifecycleInputMethodService() {
         super.onStartInputView(info, restarting)
         if (info == null) return
         val editorInfo = FlorisEditorInfo.wrap(info)
+        // Tiune fork: a new field starts without the emoji search; a restart
+        // of the same one (apps restart after the emoji it just wrote) keeps it.
+        if (!restarting) EmojiSearch.close()
         activeState.batchEdit {
             // Tiune fork: a restart of the same field (apps do this on every
             // commit) must not throw the user out of a dictation in progress;
@@ -596,6 +600,7 @@ open class FlorisImeService : LifecycleInputMethodService() {
     override fun onFinishInput() {
         flogInfo { "(no args)" }
         super.onFinishInput()
+        EmojiSearch.close()
         editorInstance.handleFinishInput()
         NlpInlineAutofill.clearInlineSuggestions()
     }
@@ -612,6 +617,7 @@ open class FlorisImeService : LifecycleInputMethodService() {
 
     override fun onWindowHidden() {
         super.onWindowHidden()
+        EmojiSearch.close()
         if (windowController.onWindowHidden()) {
             flogInfo(LogTopic.IMS_EVENTS)
             activeState.batchEdit {

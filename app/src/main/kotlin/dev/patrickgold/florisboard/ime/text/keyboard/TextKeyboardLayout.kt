@@ -16,6 +16,7 @@
 
 package dev.patrickgold.florisboard.ime.text.keyboard
 
+import dev.patrickgold.florisboard.ime.media.emoji.EmojiSearch
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
@@ -114,8 +115,11 @@ fun TextKeyboardLayout(
 
     val keyboard = evaluator.keyboard as TextKeyboard
     val glideEnabledInternal by prefs.glide.enabled.collectAsState()
+    // Tiune fork: no swiped words while the emoji search is open; they would
+    // go straight into the field, past the search.
+    val emojiSearch by EmojiSearch.isActiveFlow.collectAsState()
     val glideEnabled = glideEnabledInternal && evaluator.editorInfo.isRichInputEditor &&
-        evaluator.state.keyVariation != KeyVariation.PASSWORD
+        evaluator.state.keyVariation != KeyVariation.PASSWORD && !emojiSearch
     val glideShowTrail by prefs.glide.showTrail.collectAsState()
     val glideTrailStyle = rememberSnyggThemeQuery(FlorisImeUi.GlideTrail.elementName)
     val glideTrailColor = glideTrailStyle.foreground(default = Color(0xFFF5A623))
@@ -417,7 +421,7 @@ private class TextKeyboardLayoutController(
     var size = Size.Zero
 
     val isGlideEnabled: Boolean get() = prefs.glide.enabled.get() && editorInstance.activeInfo.isRichInputEditor &&
-        keyboardManager.activeState.keyVariation != KeyVariation.PASSWORD
+        keyboardManager.activeState.keyVariation != KeyVariation.PASSWORD && !EmojiSearch.isActive
 
     fun onTouchEventInternal(event: MotionEvent) {
         flogDebug { "event=$event" }

@@ -17,6 +17,21 @@
 package dev.patrickgold.florisboard.ime.media
 
 import android.annotation.SuppressLint
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import dev.patrickgold.florisboard.ime.ImeUiMode
+import dev.patrickgold.florisboard.ime.input.InputShiftState
+import dev.patrickgold.florisboard.ime.keyboard.KeyboardMode
+import dev.patrickgold.florisboard.ime.media.emoji.EmojiSearch
+import org.florisboard.lib.snygg.ui.SnyggIcon
+import org.florisboard.lib.snygg.ui.SnyggText
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -65,6 +80,7 @@ fun MediaInputLayout(
 ) {
     val context = LocalContext.current
     val keyboardManager by context.keyboardManager()
+    val inputFeedbackController = LocalInputFeedbackController.current
 
     var emojiLayoutDataMap by remember { mutableStateOf(EmojiData.Fallback) }
     LaunchedEffect(Unit) {
@@ -98,7 +114,35 @@ fun MediaInputLayout(
                     fontWeight = FontWeight.Bold,
                 )
             }
-            Spacer(modifier = Modifier.weight(1f))
+            // Tiune fork: search, the way Gboard has it — a wide pill
+            // between ABC and backspace that opens the letters with a search
+            // bar on top (see EmojiSearch).
+            SnyggBox(
+                elementName = FlorisImeUi.Key.elementName,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                clickAndSemanticsModifier = Modifier
+                    .clickable {
+                        inputFeedbackController.keyPress(TextKeyData.IME_UI_MODE_TEXT)
+                        EmojiSearch.open()
+                        keyboardManager.activeState.batchEdit {
+                            it.keyboardMode = KeyboardMode.CHARACTERS
+                            it.imeUiMode = ImeUiMode.TEXT
+                            // A search is not a sentence: no capital first letter.
+                            it.inputShiftState = InputShiftState.UNSHIFTED
+                        }
+                    }
+                    .semantics { contentDescription = "Search emoji" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SnyggIcon(modifier = Modifier.alpha(0.6f), imageVector = Icons.Default.Search)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    SnyggText(modifier = Modifier.alpha(0.7f), text = "Search emoji")
+                }
+            }
             KeyboardLikeButton(
                 elementName = FlorisImeUi.MediaBottomRowButton.elementName,
                 inputEventDispatcher = keyboardManager.inputEventDispatcher,
