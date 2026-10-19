@@ -116,31 +116,31 @@ fun MediaInputLayout(
             .fillMaxWidth()
             .height(FlorisImeSizing.imeUiHeight()),
     ) {
-        // Tiune fork: the search field at the top of the page, as in Gboard;
-        // on the GIF page it shows the search the grid is for, with a way
-        // back to trending. "Search KLIPY" is KLIPY's required wording.
-        val showingGifSearch = tab == MediaPanel.Tab.GIF && gifQuery.isNotEmpty()
-        MediaSearchField(
-            text = when {
-                showingGifSearch -> gifQuery
-                tab == MediaPanel.Tab.GIF -> "Search KLIPY"
-                else -> "Search emoji"
-            },
-            isPlaceholder = !showingGifSearch,
-            onClick = {
-                openSearch(if (tab == MediaPanel.Tab.GIF) MediaSearch.Kind.GIF else MediaSearch.Kind.EMOJI)
-            },
-            onClear = if (showingGifSearch) ({ MediaPanel.gifQuery = "" }) else null,
-        )
         when (tab) {
+            // Tiune fork: emoji search is the magnifier at the start of the
+            // category row, as in Gboard — no row of its own.
             MediaPanel.Tab.EMOJI -> EmojiPaletteView(
                 modifier = Modifier.weight(1f),
                 fullEmojiMappings = emojiLayoutDataMap,
+                onSearch = { openSearch(MediaSearch.Kind.EMOJI) },
             )
-            MediaPanel.Tab.GIF -> GifGrid(
-                query = gifQuery,
-                modifier = Modifier.weight(1f),
-            )
+            MediaPanel.Tab.GIF -> {
+                // The GIF page has no category row, so its search is the
+                // field at its top: "Search KLIPY" (KLIPY's required wording),
+                // or the search the grid is showing, with a way back to
+                // trending.
+                val showingGifSearch = gifQuery.isNotEmpty()
+                MediaSearchField(
+                    text = if (showingGifSearch) gifQuery else "Search KLIPY",
+                    isPlaceholder = !showingGifSearch,
+                    onClick = { openSearch(MediaSearch.Kind.GIF) },
+                    onClear = if (showingGifSearch) ({ MediaPanel.gifQuery = "" }) else null,
+                )
+                GifGrid(
+                    query = gifQuery,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
         SnyggRow(
             elementName = FlorisImeUi.MediaBottomRow.elementName,

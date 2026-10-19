@@ -23,6 +23,12 @@ import android.widget.TextView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.aspectRatio
@@ -131,6 +137,7 @@ data class EmojiMappingForView(
 fun EmojiPaletteView(
     fullEmojiMappings: EmojiData,
     modifier: Modifier = Modifier,
+    onSearch: (() -> Unit)? = null,
 ) {
     val prefs by FlorisPreferenceStore
     val context = LocalContext.current
@@ -236,9 +243,36 @@ fun EmojiPaletteView(
         val inputFeedbackController = LocalInputFeedbackController.current
         val selectedTabIndex = categoryToPageNumber(activeCategory)
         val style = rememberSnyggThemeQuery(FlorisImeUi.MediaEmojiTab.elementName)
-        PrimaryTabRow(
+        // Tiune fork: search is the first icon of the category row, the way
+        // Gboard has it — not a row of its own above (see MediaSearch).
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(FlorisImeSizing.smartbarHeight),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+        if (onSearch != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(52.dp)
+                    .clickable {
+                        inputFeedbackController.keyPress(TextKeyData.UNSPECIFIED)
+                        onSearch()
+                    }
+                    .semantics { contentDescription = "Search emoji" },
+                contentAlignment = Alignment.Center,
+            ) {
+                SnyggIcon(
+                    elementName = FlorisImeUi.MediaEmojiTab.elementName,
+                    modifier = Modifier.size(ButtonDefaults.IconSize),
+                    imageVector = Icons.Default.Search,
+                )
+            }
+        }
+        PrimaryTabRow(
+            modifier = Modifier
+                .weight(1f)
                 .height(FlorisImeSizing.smartbarHeight),
             selectedTabIndex = selectedTabIndex,
             containerColor = Color.Transparent,
@@ -273,6 +307,7 @@ fun EmojiPaletteView(
                     ) },
                 )
             }
+        }
         }
     }
 
