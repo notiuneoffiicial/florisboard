@@ -5,68 +5,11 @@
 
 package dev.patrickgold.florisboard.ime.media.emoji
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-
 /**
- * Tiune fork. Searching for an emoji by name from the emoji panel, the way
- * Gboard does: a search bar takes the place of the Smartbar, the letters come
- * back underneath, and what is typed goes into the search instead of the
- * field. Picking a result writes the emoji into the field and leaves the
- * search open for the next one.
- *
- * This object is the state: whether the search is open and what has been
- * typed. KeyboardManager routes keys here while it is open; TextInputLayout
- * shows [EmojiSearchBar] in place of the Smartbar. It closes on its own back
- * button, when the user goes to another panel, and whenever the keyboard
- * leaves the field — never carried into the next one.
- *
- * It also owns the ranking, shared with the ":word" suggestions.
+ * Tiune fork. Ranking emoji by what they are called, for the emoji search
+ * (MediaSearch, EmojiSearchBar) and the ":word" suggestions alike.
  */
 object EmojiSearch {
-    private val _isActive = MutableStateFlow(false)
-    val isActiveFlow = _isActive.asStateFlow()
-    val isActive: Boolean get() = _isActive.value
-
-    private val _query = MutableStateFlow("")
-    val queryFlow = _query.asStateFlow()
-    val query: String get() = _query.value
-
-    /** Keeps a mistyped search from growing without bound. */
-    private const val MAX_QUERY_LENGTH = 40
-
-    fun open() {
-        _query.value = ""
-        _isActive.value = true
-    }
-
-    fun close() {
-        _isActive.value = false
-        _query.value = ""
-    }
-
-    fun type(text: String) {
-        if (text.isEmpty()) return
-        // One space between words, never a leading one.
-        val next = (query + text).replace(Regex("\\s+"), " ").trimStart()
-        _query.value = next.take(MAX_QUERY_LENGTH)
-    }
-
-    fun backspace(wholeWord: Boolean = false) {
-        val q = query
-        if (q.isEmpty()) return
-        _query.value = if (wholeWord) {
-            q.trimEnd().substringBeforeLast(' ', "").let { if (it.isEmpty()) "" else "$it " }
-        } else {
-            // Whole code points, so a pasted accent never leaves half a letter.
-            q.substring(0, q.offsetByCodePoints(q.length, -1))
-        }
-    }
-
-    fun clear() {
-        _query.value = ""
-    }
-
     /**
      * The emoji in `emojis` that `query` names, best first. Empty when
      * nothing matches. `used` is the user's history (values), most recent

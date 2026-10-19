@@ -18,6 +18,14 @@ package dev.patrickgold.florisboard.ime.media
 
 import android.annotation.SuppressLint
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.EmojiEmotions
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
+import dev.patrickgold.florisboard.ime.media.gif.GifGrid
+import org.florisboard.lib.snygg.ui.rememberSnyggThemeQuery
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -29,9 +37,8 @@ import androidx.compose.ui.unit.dp
 import dev.patrickgold.florisboard.ime.ImeUiMode
 import dev.patrickgold.florisboard.ime.input.InputShiftState
 import dev.patrickgold.florisboard.ime.keyboard.KeyboardMode
-import dev.patrickgold.florisboard.ime.media.emoji.EmojiSearch
+import dev.patrickgold.florisboard.ime.media.MediaSearch
 import org.florisboard.lib.snygg.ui.SnyggIcon
-import org.florisboard.lib.snygg.ui.SnyggText
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -87,21 +94,60 @@ fun MediaInputLayout(
         emojiLayoutDataMap = EmojiData.get(context, "ime/media/emoji/root.txt")
     }
 
+    val tab by MediaPanel.tabFlow.collectAsState()
+    val gifQuery by MediaPanel.gifQueryFlow.collectAsState()
+
+    // Tiune fork: a search from the panel opens the letters with a search
+    // bar on top (MediaSearch, MediaSearchBar), the way Gboard does.
+    fun openSearch(kind: MediaSearch.Kind) {
+        inputFeedbackController.keyPress(TextKeyData.IME_UI_MODE_TEXT)
+        MediaSearch.open(kind, if (kind == MediaSearch.Kind.GIF) gifQuery else "")
+        keyboardManager.activeState.batchEdit {
+            it.keyboardMode = KeyboardMode.CHARACTERS
+            it.imeUiMode = ImeUiMode.TEXT
+            // A search is not a sentence: no capital first letter.
+            it.inputShiftState = InputShiftState.UNSHIFTED
+        }
+    }
+
     SnyggColumn(
         elementName = FlorisImeUi.Media.elementName,
         modifier = modifier
             .fillMaxWidth()
             .height(FlorisImeSizing.imeUiHeight()),
     ) {
-        EmojiPaletteView(
-            modifier = Modifier.weight(1f),
-            fullEmojiMappings = emojiLayoutDataMap,
+        // Tiune fork: the search field at the top of the page, as in Gboard;
+        // on the GIF page it shows the search the grid is for, with a way
+        // back to trending. "Search KLIPY" is KLIPY's required wording.
+        val showingGifSearch = tab == MediaPanel.Tab.GIF && gifQuery.isNotEmpty()
+        MediaSearchField(
+            text = when {
+                showingGifSearch -> gifQuery
+                tab == MediaPanel.Tab.GIF -> "Search KLIPY"
+                else -> "Search emoji"
+            },
+            isPlaceholder = !showingGifSearch,
+            onClick = {
+                openSearch(if (tab == MediaPanel.Tab.GIF) MediaSearch.Kind.GIF else MediaSearch.Kind.EMOJI)
+            },
+            onClear = if (showingGifSearch) ({ MediaPanel.gifQuery = "" }) else null,
         )
+        when (tab) {
+            MediaPanel.Tab.EMOJI -> EmojiPaletteView(
+                modifier = Modifier.weight(1f),
+                fullEmojiMappings = emojiLayoutDataMap,
+            )
+            MediaPanel.Tab.GIF -> GifGrid(
+                query = gifQuery,
+                modifier = Modifier.weight(1f),
+            )
+        }
         SnyggRow(
             elementName = FlorisImeUi.MediaBottomRow.elementName,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(FlorisImeSizing.keyboardRowBaseHeight * 0.8f),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             KeyboardLikeButton(
                 elementName = FlorisImeUi.MediaBottomRowButton.elementName,
@@ -114,35 +160,22 @@ fun MediaInputLayout(
                     fontWeight = FontWeight.Bold,
                 )
             }
-            // Tiune fork: search, the way Gboard has it — a wide pill
-            // between ABC and backspace that opens the letters with a search
-            // bar on top (see EmojiSearch).
-            SnyggBox(
-                elementName = FlorisImeUi.Key.elementName,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .padding(horizontal = 8.dp, vertical = 5.dp),
-                clickAndSemanticsModifier = Modifier
-                    .clickable {
-                        inputFeedbackController.keyPress(TextKeyData.IME_UI_MODE_TEXT)
-                        EmojiSearch.open()
-                        keyboardManager.activeState.batchEdit {
-                            it.keyboardMode = KeyboardMode.CHARACTERS
-                            it.imeUiMode = ImeUiMode.TEXT
-                            // A search is not a sentence: no capital first letter.
-                            it.inputShiftState = InputShiftState.UNSHIFTED
-                        }
-                    }
-                    .semantics { contentDescription = "Search emoji" },
-                contentAlignment = Alignment.Center,
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SnyggIcon(modifier = Modifier.alpha(0.6f), imageVector = Icons.Default.Search)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    SnyggText(modifier = Modifier.alpha(0.7f), text = "Search emoji")
-                }
-            }
+            Spacer(modifier = Modifier.weight(1f))
+            // Tiune fork: the panel's two pages, emoji and GIFs.
+            MediaTab(
+                selected = tab == MediaPanel.Tab.EMOJI,
+                label = "Emoji",
+                icon = Icons.Outlined.EmojiEmotions,
+                onClick = { MediaPanel.tab = MediaPanel.Tab.EMOJI },
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            MediaTab(
+                selected = tab == MediaPanel.Tab.GIF,
+                label = "GIFs",
+                icon = null,
+                onClick = { MediaPanel.tab = MediaPanel.Tab.GIF },
+            )
+            Spacer(modifier = Modifier.weight(1f))
             KeyboardLikeButton(
                 elementName = FlorisImeUi.MediaBottomRowButton.elementName,
                 inputEventDispatcher = keyboardManager.inputEventDispatcher,
@@ -151,6 +184,96 @@ fun MediaInputLayout(
             ) {
                 Icon(imageVector = Icons.AutoMirrored.Outlined.Backspace, contentDescription = null)
             }
+        }
+    }
+}
+
+/** Tiune fork. The search field at the top of the media panel: a quiet pill
+ *  that opens the search with the letters underneath. Text at suggestion
+ *  size, not key-label size. */
+@Composable
+private fun MediaSearchField(
+    text: String,
+    isPlaceholder: Boolean,
+    onClick: () -> Unit,
+    onClear: (() -> Unit)?,
+) {
+    val textColor = rememberSnyggThemeQuery(FlorisImeUi.Key.elementName).foreground(Color.Unspecified)
+    SnyggBox(
+        elementName = FlorisImeUi.Key.elementName,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        clickAndSemanticsModifier = Modifier
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = text },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SnyggIcon(modifier = Modifier.size(18.dp).alpha(0.6f), imageVector = Icons.Default.Search)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = text,
+                fontSize = 15.sp,
+                color = textColor,
+                maxLines = 1,
+                modifier = Modifier.weight(1f).alpha(if (isPlaceholder) 0.6f else 1f),
+            )
+            if (onClear != null) {
+                SnyggIcon(
+                    modifier = Modifier
+                        .clickable(onClick = onClear)
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .size(18.dp)
+                        .alpha(0.6f),
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Back to trending",
+                )
+            }
+        }
+    }
+}
+
+/** Tiune fork. One of the panel's pages in the bottom row, shown by an icon
+ *  or, with none, as "GIF"; the page that is up sits in a key-shaped pill. */
+@Composable
+private fun MediaTab(
+    selected: Boolean,
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    onClick: () -> Unit,
+) {
+    val textColor = rememberSnyggThemeQuery(FlorisImeUi.Key.elementName).foreground(Color.Unspecified)
+    SnyggBox(
+        elementName = if (selected) FlorisImeUi.Key.elementName else FlorisImeUi.MediaBottomRowButton.elementName,
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(64.dp)
+            .padding(vertical = 6.dp),
+        clickAndSemanticsModifier = Modifier
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (icon != null) {
+            SnyggIcon(
+                modifier = Modifier.size(22.dp).alpha(if (selected) 1f else 0.6f),
+                imageVector = icon,
+            )
+        } else {
+            // "GIF" in letters, as Gboard has it: the icon for it is a box
+            // too small to read at this size.
+            Text(
+                text = "GIF",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = textColor,
+                modifier = Modifier.alpha(if (selected) 1f else 0.6f),
+            )
         }
     }
 }

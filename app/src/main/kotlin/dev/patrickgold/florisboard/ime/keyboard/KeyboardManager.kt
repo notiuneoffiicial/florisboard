@@ -43,7 +43,8 @@ import dev.patrickgold.florisboard.ime.input.CapitalizationBehavior
 import dev.patrickgold.florisboard.ime.input.InputEventDispatcher
 import dev.patrickgold.florisboard.ime.input.InputKeyEventReceiver
 import dev.patrickgold.florisboard.ime.input.InputShiftState
-import dev.patrickgold.florisboard.ime.media.emoji.EmojiSearch
+import dev.patrickgold.florisboard.ime.media.MediaPanel
+import dev.patrickgold.florisboard.ime.media.MediaSearch
 import dev.patrickgold.florisboard.ime.nlp.ClipboardSuggestionCandidate
 import dev.patrickgold.florisboard.ime.nlp.PunctuationRule
 import dev.patrickgold.florisboard.ime.nlp.SuggestionCandidate
@@ -697,9 +698,9 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     override fun onInputKeyDown(data: KeyData) {
         val windowController = FlorisImeService.windowControllerOrNull()
         windowController?.editor?.disableIfNoGestureInProgress()
-        // Tiune fork: the arrows move nothing while the emoji search is open
-        // (see routeToEmojiSearch), so they must not start a selection either.
-        if (EmojiSearch.isActive && data.code in EMOJI_SEARCH_IGNORED_KEYS) return
+        // Tiune fork: the arrows move nothing while a media search is open
+        // (see routeToMediaSearch), so they must not start a selection either.
+        if (MediaSearch.isActive && data.code in MEDIA_SEARCH_IGNORED_KEYS) return
         when (data.code) {
             KeyCode.ARROW_DOWN,
             KeyCode.ARROW_LEFT,
@@ -717,7 +718,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
 
     override fun onInputKeyUp(data: KeyData) = activeState.batchEdit {
         val windowController = FlorisImeService.windowControllerOrNull() ?: return@batchEdit
-        if (EmojiSearch.isActive && routeToEmojiSearch(data)) return@batchEdit
+        if (MediaSearch.isActive && routeToMediaSearch(data)) return@batchEdit
         when (data.code) {
             KeyCode.ARROW_DOWN,
             KeyCode.ARROW_LEFT,
@@ -845,7 +846,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     }
 
     /**
-     * Tiune fork. While the emoji search is open the letters type the search,
+     * Tiune fork. While a media search (emoji or GIF) is open the letters type the search,
      * not into the field: the field is not where the user is looking, and an
      * autocorrect or a stray space landing in their message would be found
      * only later. Keys that only change the keyboard (shift, the symbol
@@ -853,23 +854,31 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
      * nothing; leaving for another panel closes the search. Returns whether
      * the key was the search's.
      */
-    private fun routeToEmojiSearch(data: KeyData): Boolean {
+    private fun routeToMediaSearch(data: KeyData): Boolean {
         when (data.code) {
-            KeyCode.DELETE -> EmojiSearch.backspace()
-            KeyCode.DELETE_WORD -> EmojiSearch.backspace(wholeWord = true)
-            KeyCode.SPACE -> EmojiSearch.type(" ")
-            in EMOJI_SEARCH_IGNORED_KEYS -> {}
+            // The search key: a GIF search shows its results in the panel's
+            // grid; an emoji search's results are already all on screen.
+            KeyCode.ENTER -> if (MediaSearch.kind == MediaSearch.Kind.GIF) {
+                MediaPanel.gifQuery = MediaSearch.query
+                MediaPanel.tab = MediaPanel.Tab.GIF
+                MediaSearch.close()
+                activeState.imeUiMode = ImeUiMode.MEDIA
+            }
+            KeyCode.DELETE -> MediaSearch.backspace()
+            KeyCode.DELETE_WORD -> MediaSearch.backspace(wholeWord = true)
+            KeyCode.SPACE -> MediaSearch.type(" ")
+            in MEDIA_SEARCH_IGNORED_KEYS -> {}
             KeyCode.IME_UI_MODE_MEDIA,
             KeyCode.IME_UI_MODE_CLIPBOARD,
             KeyCode.IME_HIDE_UI,
             KeyCode.VOICE_INPUT -> {
-                EmojiSearch.close()
+                MediaSearch.close()
                 return false
             }
             else -> {
                 if (data.type != KeyType.CHARACTER && data.type != KeyType.NUMERIC) return false
                 if (data.code < 0) return false
-                EmojiSearch.type(data.asString(isForDisplay = false))
+                MediaSearch.type(data.asString(isForDisplay = false))
                 if (activeState.inputShiftState != InputShiftState.CAPS_LOCK &&
                     !inputEventDispatcher.isPressed(KeyCode.SHIFT)
                 ) {
@@ -898,7 +907,7 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
 
     override fun onInputKeyRepeat(data: KeyData) {
         FlorisImeService.inputFeedbackController()?.keyRepeatedAction(data)
-        if (EmojiSearch.isActive && data.code in EMOJI_SEARCH_IGNORED_KEYS) return
+        if (MediaSearch.isActive && data.code in MEDIA_SEARCH_IGNORED_KEYS) return
         when (data.code) {
             KeyCode.ARROW_DOWN,
             KeyCode.ARROW_LEFT,
@@ -1106,9 +1115,10 @@ class KeyboardManager(context: Context) : InputKeyEventReceiver {
     }
 }
 
-/** Tiune fork. Keys that would edit or move in the field, swallowed while the
- *  emoji search is open (see KeyboardManager.routeToEmojiSearch). */
-private val EMOJI_SEARCH_IGNORED_KEYS = setOf(
+/** Tiune fork. Keys that would edit or move in the field, swallowed while a
+ *  media search is open (see KeyboardManager.routeToMediaSearch). Enter is
+ *  here for onInputKeyDown/Repeat; routeToMediaSearch handles it first. */
+private val MEDIA_SEARCH_IGNORED_KEYS = setOf(
     KeyCode.ENTER,
     KeyCode.ARROW_DOWN, KeyCode.ARROW_LEFT, KeyCode.ARROW_RIGHT, KeyCode.ARROW_UP,
     KeyCode.MOVE_START_OF_PAGE, KeyCode.MOVE_END_OF_PAGE,

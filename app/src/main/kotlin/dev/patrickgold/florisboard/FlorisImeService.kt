@@ -49,7 +49,8 @@ import dev.patrickgold.florisboard.ime.editor.EditorRange
 import dev.patrickgold.florisboard.ime.editor.FlorisEditorInfo
 import dev.patrickgold.florisboard.ime.input.InputFeedbackController
 import dev.patrickgold.florisboard.ime.keyboard.isFullscreenInputRequired
-import dev.patrickgold.florisboard.ime.media.emoji.EmojiSearch
+import dev.patrickgold.florisboard.ime.media.MediaPanel
+import dev.patrickgold.florisboard.ime.media.MediaSearch
 import dev.patrickgold.florisboard.ime.landscapeinput.ExtractedInputRootView
 import dev.patrickgold.florisboard.ime.landscapeinput.LandscapeInputUiMode
 import dev.patrickgold.florisboard.ime.lifecycle.LifecycleInputMethodService
@@ -247,6 +248,15 @@ open class FlorisImeService : LifecycleInputMethodService() {
             return FlorisImeServiceReference.get()?.createKeyboardGuideView(context)
         }
 
+        /** Tiune fork. The GIF provider's key, from the embedding app, or
+         *  null when GIFs are not set up (the GIF page says so). */
+        fun gifApiKeyOrNull(): String? =
+            FlorisImeServiceReference.get()?.gifApiKey()?.takeIf { it.isNotBlank() }
+
+        /** Tiune fork. A stand-in for the GIF API's base URL (tests), or null. */
+        fun gifApiBaseOrNull(): String? =
+            FlorisImeServiceReference.get()?.gifApiBase()?.takeIf { it.isNotBlank() }
+
         /** A View the embedding app draws for the whole mic key — its own
          *  microphone, mark and light — or null for the drawables above. A
          *  NEW view each call. */
@@ -303,6 +313,15 @@ open class FlorisImeService : LifecycleInputMethodService() {
      *  embedding app may know of other starts that are not the user moving
      *  to a new field. */
     open fun keepVoiceInputOnStart(restarting: Boolean): Boolean = restarting
+
+    /** Tiune fork. The KLIPY app key for the GIF page; null or blank leaves
+     *  GIFs off. KLIPY's keys are not secrets — its terms have every client
+     *  call it directly — so the embedding app ships it in its build. */
+    open fun gifApiKey(): String? = null
+
+    /** Tiune fork. Where the GIF API is, when not KLIPY's own (a test
+     *  stand-in in a debug build); null for KLIPY. */
+    open fun gifApiBase(): String? = null
 
     /** Tiune fork. Build the guide drawn over the keys while
      *  [keyboardGuideVisible] is true. Return a NEW view each time (it is
@@ -550,7 +569,10 @@ open class FlorisImeService : LifecycleInputMethodService() {
         val editorInfo = FlorisEditorInfo.wrap(info)
         // Tiune fork: a new field starts without the emoji search; a restart
         // of the same one (apps restart after the emoji it just wrote) keeps it.
-        if (!restarting) EmojiSearch.close()
+        if (!restarting) {
+            MediaSearch.close()
+            MediaPanel.reset()
+        }
         activeState.batchEdit {
             // Tiune fork: a restart of the same field (apps do this on every
             // commit) must not throw the user out of a dictation in progress;
@@ -600,7 +622,7 @@ open class FlorisImeService : LifecycleInputMethodService() {
     override fun onFinishInput() {
         flogInfo { "(no args)" }
         super.onFinishInput()
-        EmojiSearch.close()
+        MediaSearch.close()
         editorInstance.handleFinishInput()
         NlpInlineAutofill.clearInlineSuggestions()
     }
@@ -617,7 +639,7 @@ open class FlorisImeService : LifecycleInputMethodService() {
 
     override fun onWindowHidden() {
         super.onWindowHidden()
-        EmojiSearch.close()
+        MediaSearch.close()
         if (windowController.onWindowHidden()) {
             flogInfo(LogTopic.IMS_EVENTS)
             activeState.batchEdit {

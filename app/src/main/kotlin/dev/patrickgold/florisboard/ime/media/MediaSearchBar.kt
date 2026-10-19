@@ -3,7 +3,7 @@
  * of FlorisBoard.
  */
 
-package dev.patrickgold.florisboard.ime.media.emoji
+package dev.patrickgold.florisboard.ime.media
 
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -51,6 +52,11 @@ import androidx.compose.ui.unit.sp
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.editorInstance
 import dev.patrickgold.florisboard.ime.ImeUiMode
+import dev.patrickgold.florisboard.ime.media.emoji.Emoji
+import dev.patrickgold.florisboard.ime.media.emoji.EmojiData
+import dev.patrickgold.florisboard.ime.media.emoji.EmojiHistoryHelper
+import dev.patrickgold.florisboard.ime.media.emoji.EmojiSearch
+import dev.patrickgold.florisboard.ime.media.gif.GifResultsRow
 import dev.patrickgold.florisboard.ime.keyboard.FlorisImeSizing
 import dev.patrickgold.florisboard.ime.theme.FlorisImeUi
 import dev.patrickgold.florisboard.keyboardManager
@@ -65,6 +71,11 @@ import org.florisboard.lib.snygg.ui.SnyggIcon
 import org.florisboard.lib.snygg.ui.SnyggIconButton
 import org.florisboard.lib.snygg.ui.SnyggRow
 import org.florisboard.lib.snygg.ui.SnyggText
+import org.florisboard.lib.snygg.ui.rememberSnyggThemeQuery
+
+/** The text in the search field: the size of the suggestions, not of a key
+ *  label — the field inherits the key style for its shape only. */
+private val SEARCH_TEXT_SIZE = 16.sp
 
 /** Tiune's amber, the colour of every accent on the keyboard. */
 private val Caret = Color(0xFFF5A623)
@@ -74,22 +85,122 @@ private val Caret = Color(0xFFF5A623)
 private const val MAX_RESULTS = 60
 
 /**
- * Tiune fork. The emoji search, in place of the Smartbar while
- * [EmojiSearch] is open: the results on top, the search itself underneath —
- * the order Gboard uses, so the row of letters is right below what is being
- * typed. A result goes into the field on a tap; the search stays for the
- * next one. The back arrow returns to the emoji panel.
+ * Tiune fork. A media search, in place of the Smartbar while [MediaSearch] is
+ * open: the results on top, the search itself underneath — the order Gboard
+ * uses, so the row of letters is right below what is being typed. Emoji go
+ * into the field on a tap; GIFs are sent; either way the search stays for the
+ * next one. The back arrow returns to the panel it came from.
  */
 @Composable
-fun EmojiSearchBar() {
+fun MediaSearchBar() {
+    val context = LocalContext.current
+    val keyboardManager by context.keyboardManager()
+    val query by MediaSearch.queryFlow.collectAsState()
+    val kind by MediaSearch.kindFlow.collectAsState()
+    val textColor = rememberSnyggThemeQuery(FlorisImeUi.Key.elementName).foreground(Color.Unspecified)
+
+    SnyggColumn(FlorisImeUi.Smartbar.elementName) {
+        when (kind) {
+            MediaSearch.Kind.EMOJI -> EmojiResultsRow(query)
+            // Taller than a row of emoji: a GIF has to be big enough to see
+            // what it is before it is sent to someone.
+            MediaSearch.Kind.GIF -> GifResultsRow(
+                query = query,
+                modifier = Modifier.height(FlorisImeSizing.smartbarHeight * 1.8f),
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(FlorisImeSizing.smartbarHeight),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SnyggIconButton(
+                elementName = FlorisImeUi.SmartbarSharedActionsToggle.elementName,
+                onClick = {
+                    MediaPanel.tab = if (kind == MediaSearch.Kind.GIF) MediaPanel.Tab.GIF else MediaPanel.Tab.EMOJI
+                    MediaSearch.close()
+                    keyboardManager.activeState.imeUiMode = ImeUiMode.MEDIA
+                },
+                modifier = Modifier
+                    .sizeIn(maxHeight = FlorisImeSizing.smartbarHeight)
+                    .aspectRatio(1f),
+            ) {
+                SnyggIcon(
+                    imageVector = Icons.AutoMirrored.Default.ArrowBack,
+                    contentDescription = if (kind == MediaSearch.Kind.GIF) "Back to GIFs" else "Back to emoji",
+                )
+            }
+            SnyggBox(
+                elementName = FlorisImeUi.Key.elementName,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(end = 8.dp, top = 6.dp, bottom = 6.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Start,
+                ) {
+                    SnyggIcon(
+                        modifier = Modifier.alpha(0.6f).size(18.dp),
+                        imageVector = Icons.Default.Search,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    if (query.isEmpty()) {
+                        Caret()
+                        Text(
+                            modifier = Modifier.alpha(0.55f),
+                            // "Search KLIPY" is the wording KLIPY's terms
+                            // require in a field that searches it.
+                            text = if (kind == MediaSearch.Kind.GIF) "Search KLIPY" else "Search emoji",
+                            fontSize = SEARCH_TEXT_SIZE,
+                            color = textColor,
+                            maxLines = 1,
+                        )
+                    } else {
+                        // The end of a long search, which is where the
+                        // typing happens.
+                        Text(
+                            modifier = Modifier.weight(1f, fill = false),
+                            text = if (query.length > 28) "…" + query.takeLast(28) else query,
+                            fontSize = SEARCH_TEXT_SIZE,
+                            color = textColor,
+                            maxLines = 1,
+                        )
+                        Caret()
+                        Spacer(Modifier.weight(1f))
+                        SnyggIconButton(
+                            onClick = { MediaSearch.clear() },
+                            modifier = Modifier.sizeIn(maxHeight = FlorisImeSizing.smartbarHeight),
+                        ) {
+                            SnyggIcon(
+                                modifier = Modifier.alpha(0.6f).size(18.dp),
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear search",
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Emoji results as a row: the best match first, the user's own recent ones
+ *  before anything is typed. */
+@Composable
+private fun EmojiResultsRow(query: String) {
     val prefs by FlorisPreferenceStore
     val context = LocalContext.current
     val editorInstance by context.editorInstance()
-    val keyboardManager by context.keyboardManager()
     val subtypeManager by context.subtypeManager()
     val scope = rememberCoroutineScope()
 
-    val query by EmojiSearch.queryFlow.collectAsState()
     val skinTone by prefs.emoji.preferredSkinTone.collectAsState()
     val history by prefs.emoji.historyData.collectAsState()
     val subtype by subtypeManager.activeSubtypeFlow.collectAsState()
@@ -118,7 +229,6 @@ fun EmojiSearchBar() {
         scope.launch { EmojiHistoryHelper.markEmojiUsed(prefs, emoji) }
     }
 
-    SnyggColumn(FlorisImeUi.Smartbar.elementName) {
         SnyggRow(
             elementName = FlorisImeUi.SmartbarCandidatesRow.elementName,
             modifier = Modifier
@@ -149,77 +259,6 @@ fun EmojiSearchBar() {
                 }
             }
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(FlorisImeSizing.smartbarHeight),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SnyggIconButton(
-                elementName = FlorisImeUi.SmartbarSharedActionsToggle.elementName,
-                onClick = {
-                    EmojiSearch.close()
-                    keyboardManager.activeState.imeUiMode = ImeUiMode.MEDIA
-                },
-                modifier = Modifier
-                    .sizeIn(maxHeight = FlorisImeSizing.smartbarHeight)
-                    .aspectRatio(1f),
-            ) {
-                SnyggIcon(
-                    imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                    contentDescription = "Back to emoji",
-                )
-            }
-            SnyggBox(
-                elementName = FlorisImeUi.Key.elementName,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .padding(end = 8.dp, top = 6.dp, bottom = 6.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Start,
-                ) {
-                    SnyggIcon(
-                        modifier = Modifier.alpha(0.6f),
-                        imageVector = Icons.Default.Search,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    if (query.isEmpty()) {
-                        Caret()
-                        SnyggText(
-                            modifier = Modifier.alpha(0.55f),
-                            text = "Search emoji",
-                        )
-                    } else {
-                        // The end of a long search, which is where the
-                        // typing happens.
-                        SnyggText(
-                            modifier = Modifier.weight(1f, fill = false),
-                            text = if (query.length > 24) "…" + query.takeLast(24) else query,
-                        )
-                        Caret()
-                        Spacer(Modifier.weight(1f))
-                        SnyggIconButton(
-                            onClick = { EmojiSearch.clear() },
-                            modifier = Modifier.sizeIn(maxHeight = FlorisImeSizing.smartbarHeight),
-                        ) {
-                            SnyggIcon(
-                                modifier = Modifier.alpha(0.6f),
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Clear search",
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 /** A blinking text caret, so it reads as a box being typed into. */
