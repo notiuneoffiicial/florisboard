@@ -98,8 +98,13 @@ fun AnimatedGif(file: GifFile, modifier: Modifier = Modifier, label: String? = n
             runCatching { ImageDecoder.decodeDrawable(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) }.getOrNull()
         }
     }
+    // Started here and stopped with this very drawable. The first version
+    // read the state inside onDispose — by then the NEW drawable — so every
+    // GIF was stopped the moment it arrived and sat on its first frame.
     DisposableEffect(drawable) {
-        onDispose { (drawable as? AnimatedImageDrawable)?.stop() }
+        val shown = drawable as? AnimatedImageDrawable
+        shown?.start()
+        onDispose { shown?.stop() }
     }
     Box(
         modifier = modifier
@@ -112,7 +117,6 @@ fun AnimatedGif(file: GifFile, modifier: Modifier = Modifier, label: String? = n
                 factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP } },
                 update = { view ->
                     if (view.drawable !== d) view.setImageDrawable(d)
-                    (d as? AnimatedImageDrawable)?.start()
                 },
                 modifier = Modifier.matchParentSize(),
             )
