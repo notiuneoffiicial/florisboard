@@ -61,6 +61,8 @@ object Klipy {
      *  partner panel, which is where its terms put it. */
     private const val CONTENT_FILTER = "medium"
     private const val PREFS = "tiune_gifs"
+    /** How long a sent GIF's file may outlive its send (see saveForSending). */
+    private const val SENT_FILE_LIFETIME_MS = 5 * 60 * 1000L
     private const val PREF_CUSTOMER_ID = "customer_id"
 
     /** A random id that stays the same for this keyboard, which KLIPY asks
@@ -144,11 +146,17 @@ object Klipy {
     }
 
     /** Write the GIF being sent to the cache, where the FileProvider can
-     *  hand it to the app. Only the last few are kept: they exist to be
-     *  sent, not to build a library of KLIPY's media (its terms). */
+     *  hand it to the app — the one way Android lets a keyboard insert an
+     *  image. KLIPY's terms forbid keeping copies of its media, so a file
+     *  lives only long enough for the receiving app to read it: the previous
+     *  send survives a few minutes (an app may still be copying it), nothing
+     *  older does. */
     suspend fun saveForSending(context: Context, item: GifItem, bytes: ByteArray): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "gifs").apply { mkdirs() }
-        dir.listFiles()?.sortedByDescending { it.lastModified() }?.drop(4)?.forEach { it.delete() }
+        val cutoff = System.currentTimeMillis() - SENT_FILE_LIFETIME_MS
+        dir.listFiles()?.sortedByDescending { it.lastModified() }?.forEachIndexed { i, f ->
+            if (i >= 1 || f.lastModified() < cutoff) f.delete()
+        }
         val safe = item.slug.replace(Regex("[^A-Za-z0-9_-]"), "_").take(60).ifEmpty { "gif" }
         File(dir, "$safe.gif").apply { writeBytes(bytes) }
     }

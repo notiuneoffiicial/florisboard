@@ -203,8 +203,9 @@ private class GifFeed(val query: String) {
         error = null
         try {
             val next = Klipy.page(context, query, page + 1)
-            val seen = items.mapTo(HashSet()) { it.slug }
-            items = items + next.items.filter { seen.add(it.slug) }
+            // Every result, in KLIPY's order: its terms forbid reordering or
+            // removing any (even a repeat across pages).
+            items = items + next.items
             page += 1
             hasNext = next.hasNext && next.items.isNotEmpty()
         } catch (e: GifsNotConfigured) {
@@ -263,7 +264,9 @@ fun GifGrid(query: String, modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                itemsIndexed(feed.items, key = { _, it -> it.slug }) { _, item ->
+                // Keyed by position: the list only grows at the end, and a
+                // GIF KLIPY repeats on a later page must still get a slot.
+                itemsIndexed(feed.items, key = { index, _ -> index }) { _, item ->
                     AnimatedGif(
                         file = item.preview,
                         label = item.title.ifBlank { "GIF" },
@@ -319,7 +322,8 @@ fun GifResultsRow(query: String, modifier: Modifier = Modifier) {
                     .padding(horizontal = 6.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                for (item in feed.items.take(20)) {
+                // The whole page, in KLIPY's order (its terms).
+                for (item in feed.items) {
                     AnimatedGif(
                         file = item.preview,
                         label = item.title.ifBlank { "GIF" },
